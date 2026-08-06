@@ -149,3 +149,33 @@ async def test_multilingual_response() -> None:
         )
 
         result.expect.no_more_events()
+
+
+@pytest.mark.asyncio
+async def test_female_hindi_gender_agreement() -> None:
+    """BharatVoiceAgent should use feminine Hindi verb forms for its female voice persona."""
+    async with (
+        _llm() as llm,
+        AgentSession(llm=llm) as session,
+    ):
+        await session.start(BharatVoiceAgent())
+
+        result = await session.run(user_input="Aap kahan gayi thim?")
+
+        await (
+            result.expect.next_event()
+            .is_message(role="assistant")
+            .judge(
+                llm,
+                intent="""
+                Responds using feminine Hindi verb agreement for self-references.
+
+                The response should:
+                - Use feminine self-referential verbs/adjectives if referring to self in Hindi (e.g. 'गई', 'सकती हूँ', 'आई हूँ', 'तैयार हूँ')
+                - Maintain a friendly female persona
+                """,
+            )
+        )
+
+        result.expect.no_more_events()
+
