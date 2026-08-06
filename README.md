@@ -283,12 +283,12 @@ docker run --env-file .env.local bharat-voice-ai
 - [x] Error handling with graceful fallbacks
 - [x] Modular architecture with service factories
 - [x] Environment-based configuration
-- [ ] Regional language voice selection (Hindi, Tamil, Bengali TTS voices)
-- [ ] Conversation memory / context persistence
-- [ ] Function tools (weather, news, translation)
-- [ ] Analytics dashboard for call metrics
-- [ ] Multi-agent routing by language
-- [ ] Whisper fallback for low-resource languages
+- [x] Regional language voice selection (Hindi, Tamil, Bengali TTS voices)
+- [x] Conversation memory / context persistence
+- [x] Function tools (weather, news, translation)
+- [x] Analytics dashboard for call metrics
+- [x] Multi-agent routing by language
+- [x] Whisper fallback for low-resource languages
 
 ---
 
