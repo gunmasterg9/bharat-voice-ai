@@ -1,135 +1,162 @@
-import logging
+"""
+Bharat Voice AI — Agent Entrypoint
 
-from dotenv import load_dotenv
+Slim orchestrator that wires together the modular components:
+- Configuration (agent/config.py)
+- Voice Agent (agent/voice_agent.py)
+- Services (services/stt.py, services/tts.py, services/llm.py)
+- Logging (agent/logger.py)
+
+Run with:
+    uv run python src/agent.py dev       # Development mode
+    uv run python src/agent.py start     # Production mode
+    uv run python src/agent.py console   # Terminal testing
+"""
+
 from livekit import rtc
 from livekit.agents import (
-    Agent,
     AgentServer,
     AgentSession,
     JobContext,
     JobProcess,
     cli,
-    inference,
-    tokenize,
     room_io,
 )
-from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
+from livekit.plugins import noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-logger = logging.getLogger("agent")
+from agent.config import load_settings
+from agent.logger import (
+    COMPONENT_AGENT,
+    get_logger,
+    log_pipeline_config,
+    log_session_connected,
+    log_session_error,
+    log_startup_banner,
+    setup_logging,
+)
+from agent.voice_agent import BharatVoiceAgent
+from services.llm import create_llm
+from services.stt import create_stt
+from services.tts import create_tts
 
-load_dotenv(".env.local")
+# ---------------------------------------------------------------------------
+# Initialize logging and configuration
+# ---------------------------------------------------------------------------
+setup_logging()
+logger = get_logger(COMPONENT_AGENT)
 
-# Change this prompt to change what your voice agent does.
-# See README.md for example prompts (customer support, language tutor, receptionist).
-SYSTEM_PROMPT = """You are a friendly and efficient customer support agent for a tech company. Help users with account issues, billing questions, and product troubleshooting. Be concise, empathetic, and solution-oriented. If you don't know something, say so honestly and offer to escalate. Your responses are concise and without complex formatting, emojis, or symbols."""
+# Load and validate all settings at import time — fail fast on missing keys
+try:
+    settings = load_settings()
+except OSError as exc:
+    logger.error(str(exc))
+    raise SystemExit(1) from exc
 
+# Log startup information
+log_startup_banner()
+log_pipeline_config(
+    stt_model=settings.deepgram.model,
+    llm_model=settings.gemini.model,
+    tts_voice=settings.murf.voice,
+    tts_locale=settings.murf.locale,
+)
 
-class Assistant(Agent):
-    def __init__(self) -> None:
-        super().__init__(instructions=SYSTEM_PROMPT)
-
-    # To add tools, use the @function_tool decorator.
-    # Here's an example that adds a simple weather tool.
-    # You also have to add `from livekit.agents import function_tool, RunContext` to the top of this file
-    # @function_tool
-    # async def lookup_weather(self, context: RunContext, location: str):
-    #     """Use this tool to look up current weather information in the given location.
-    #
-    #     If the location is not supported by the weather service, the tool will indicate this. You must tell the user the location's weather is unavailable.
-    #
-    #     Args:
-    #         location: The location to look up weather information for (e.g. city name)
-    #     """
-    #
-    #     logger.info(f"Looking up weather for {location}")
-    #
-    #     return "sunny with a temperature of 70 degrees."
-
-
+# ---------------------------------------------------------------------------
+# Agent server setup
+# ---------------------------------------------------------------------------
 server = AgentServer()
 
 
-def prewarm(proc: JobProcess):
-    proc.userdata["vad"] = silero.VAD.load()
+def prewarm(proc: JobProcess) -> None:
+    """
+    Pre-load models during process startup for faster first response.
+
+    Loads the Silero VAD model into process-level userdata so it's
+    available for all sessions without per-session loading overhead.
+
+    Args:
+        proc: The LiveKit JobProcess instance.
+    """
+    logger.info("Pre-warming: loading Silero VAD model...")
+    try:
+        proc.userdata["vad"] = silero.VAD.load()
+        logger.info("Silero VAD model loaded successfully")
+    except Exception as exc:
+        logger.error("Failed to load Silero VAD: %s", str(exc))
+        raise
 
 
 server.setup_fnc = prewarm
 
 
-@server.rtc_session(agent_name="my-agent")
-async def my_agent(ctx: JobContext):
-    # Logging setup
-    # Add any other context you want in all log entries here
+@server.rtc_session(agent_name=settings.agent_name)
+async def bharat_voice_session(ctx: JobContext) -> None:
+    """
+    Handle an incoming voice session.
+
+    Creates the full voice pipeline (STT → LLM → TTS) using the
+    modular service factories, then starts the BharatVoiceAgent.
+
+    Args:
+        ctx: The LiveKit JobContext with room and participant info.
+    """
+    # Add room context to all log entries for this session
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
 
-    # Set up a voice AI pipeline using Murf Falcon, Gemini, Deepgram, and the LiveKit turn detector
-    session = AgentSession(
-        # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-        # See all available models at https://docs.livekit.io/agents/models/stt/
-        stt=deepgram.STT(model="nova-3"),
-        # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
-        # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm=google.LLM(
-                model="gemini-3.5-flash-lite",
-            ),
-        # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-        # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
-        tts=murf.TTS(
-                voice="Anisha", 
-                locale="en-IN",
-                style="Conversation",
-                tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
-                text_pacing=True
-            ),
-        # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
-        # See more at https://docs.livekit.io/agents/build/turns
-        turn_detection=MultilingualModel(),
-        vad=ctx.proc.userdata["vad"],
-        # allow the LLM to generate a response while waiting for the end of turn
-        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
-        preemptive_generation=True,
-    )
+    log_session_connected(ctx.room.name)
 
-    # To use a realtime model instead of a voice pipeline, use the following session setup instead.
-    # (Note: This is for the OpenAI Realtime API. For other providers, see https://docs.livekit.io/agents/models/realtime/))
-    # 1. Install livekit-agents[openai]
-    # 2. Set OPENAI_API_KEY in .env.local
-    # 3. Add `from livekit.plugins import openai` to the top of this file
-    # 4. Use the following session setup instead of the version above
-    # session = AgentSession(
-    #     llm=openai.realtime.RealtimeModel(voice="marin")
-    # )
+    try:
+        # Build the voice pipeline from configured services
+        stt_service = create_stt(settings.deepgram)
+        llm_service = create_llm(settings.gemini)
+        tts_service = create_tts(settings.murf)
 
-    # # Add a virtual avatar to the session, if desired
-    # # For other providers, see https://docs.livekit.io/agents/models/avatar/
-    # avatar = hedra.AvatarSession(
-    #   avatar_id="...",  # See https://docs.livekit.io/agents/models/avatar/plugins/hedra
-    # )
-    # # Start the avatar and wait for it to join
-    # await avatar.start(session, room=ctx.room)
+        session = AgentSession(
+            # Deepgram Nova-3 STT — user speech → text
+            stt=stt_service,
+            # Google Gemini 2.5 Flash — text → response
+            llm=llm_service,
+            # Murf Falcon TTS — response → voice
+            tts=tts_service,
+            # Multilingual turn detection for Indian language support
+            turn_detection=MultilingualModel(),
+            # Pre-loaded Silero VAD from prewarm
+            vad=ctx.proc.userdata["vad"],
+            # Start generating before user finishes for lower latency
+            preemptive_generation=True,
+        )
 
-    # Start the session, which initializes the voice pipeline and warms up the models
-    await session.start(
-        agent=Assistant(),
-        room=ctx.room,
-        room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                noise_cancellation=lambda params: (
-                    noise_cancellation.BVCTelephony()
-                    if params.participant.kind
-                    == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
-                    else noise_cancellation.BVC()
+        # Start the pipeline with BharatVoiceAgent
+        await session.start(
+            agent=BharatVoiceAgent(),
+            room=ctx.room,
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(
+                    # Adaptive noise cancellation based on connection type
+                    noise_cancellation=lambda params: (
+                        noise_cancellation.BVCTelephony()
+                        if params.participant.kind
+                        == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
+                        else noise_cancellation.BVC()
+                    ),
                 ),
             ),
-        ),
-    )
+        )
 
-    # Join the room and connect to the user
-    await ctx.connect()
+        # Connect to the LiveKit room
+        await ctx.connect()
+        logger.info("Session active in room: %s", ctx.room.name)
+
+    except Exception as exc:
+        log_session_error(exc, context="pipeline setup")
+        raise
 
 
+# ---------------------------------------------------------------------------
+# CLI entrypoint
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     cli.run_app(server)

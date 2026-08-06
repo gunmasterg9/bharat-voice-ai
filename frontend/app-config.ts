@@ -33,9 +33,10 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
-  companyName: 'Murf AI',
-  pageTitle: 'Voice Agent Starter',
-  pageDescription: 'A voice agent powered by Murf Falcon — the fastest TTS API',
+  companyName: 'Bharat Voice AI',
+  pageTitle: 'Bharat Voice AI — Multilingual Assistant',
+  pageDescription:
+    'A multilingual AI voice assistant for India, powered by Murf Falcon TTS, Deepgram STT, and Google Gemini',
 
   supportsChatInput: true,
   supportsVideoInput: true,
@@ -46,7 +47,7 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   accent: '#6366F1',
   logoDark: '/murf-logo-dark.svg',
   accentDark: '#818cf8',
-  startButtonText: 'Start talking',
+  startButtonText: 'Start Talking',
 
   // optional: audio visualization configuration
   // audioVisualizerType: 'bar',
