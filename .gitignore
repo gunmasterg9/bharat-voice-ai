@@ -2,3 +2,7 @@
 .env.*
 !.env.example
 .DS_Store
+*.exe
+__pycache__/
+.pytest_cache/
+

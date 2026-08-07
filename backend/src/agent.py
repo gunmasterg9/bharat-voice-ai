@@ -1,7 +1,7 @@
 """
 Bharat Voice AI — Agent Entrypoint
 
-Slim orchestrator that wires together the modular components:
+Slim orchestrator that wires together modular components:
 - Configuration (agent/config.py)
 - Voice Agent (agent/voice_agent.py)
 - Services (services/stt.py, services/tts.py, services/llm.py)
@@ -35,6 +35,7 @@ from agent.logger import (
     log_startup_banner,
     setup_logging,
 )
+from agent.prompts import WELCOME_MESSAGE
 from agent.voice_agent import BharatVoiceAgent
 from services.llm import create_llm
 from services.stt import create_stt
@@ -69,15 +70,7 @@ server = AgentServer()
 
 
 def prewarm(proc: JobProcess) -> None:
-    """
-    Pre-load models during process startup for faster first response.
-
-    Loads the Silero VAD model into process-level userdata so it's
-    available for all sessions without per-session loading overhead.
-
-    Args:
-        proc: The LiveKit JobProcess instance.
-    """
+    """Pre-load Silero VAD model during process startup for lower latency."""
     logger.info("Pre-warming: loading Silero VAD model...")
     try:
         proc.userdata["vad"] = silero.VAD.load()
@@ -92,16 +85,7 @@ server.setup_fnc = prewarm
 
 @server.rtc_session(agent_name=settings.agent_name)
 async def bharat_voice_session(ctx: JobContext) -> None:
-    """
-    Handle an incoming voice session.
-
-    Creates the full voice pipeline (STT → LLM → TTS) using the
-    modular service factories, then starts the BharatVoiceAgent.
-
-    Args:
-        ctx: The LiveKit JobContext with room and participant info.
-    """
-    # Add room context to all log entries for this session
+    """Handle an incoming voice session."""
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
@@ -109,33 +93,26 @@ async def bharat_voice_session(ctx: JobContext) -> None:
     log_session_connected(ctx.room.name)
 
     try:
-        # Build the voice pipeline from configured services
         stt_service = create_stt(settings.deepgram)
         llm_service = create_llm(settings.gemini)
         tts_service = create_tts(settings.murf)
 
         session = AgentSession(
-            # Deepgram Nova-3 STT — user speech → text
             stt=stt_service,
-            # Google Gemini 2.5 Flash — text → response
             llm=llm_service,
-            # Murf Falcon TTS — response → voice
             tts=tts_service,
-            # Multilingual turn detection for Indian language support
             turn_detection=MultilingualModel(),
-            # Pre-loaded Silero VAD from prewarm
             vad=ctx.proc.userdata["vad"],
-            # Start generating before user finishes for lower latency
             preemptive_generation=True,
         )
 
-        # Start the pipeline with BharatVoiceAgent
+        voice_agent = BharatVoiceAgent(session_id=ctx.room.name)
+
         await session.start(
-            agent=BharatVoiceAgent(),
+            agent=voice_agent,
             room=ctx.room,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(
-                    # Adaptive noise cancellation based on connection type
                     noise_cancellation=lambda params: (
                         noise_cancellation.BVCTelephony()
                         if params.participant.kind
@@ -146,17 +123,16 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             ),
         )
 
-        # Connect to the LiveKit room
         await ctx.connect()
         logger.info("Session active in room: %s", ctx.room.name)
+
+        # Greet user with official Day 2 welcome message
+        await session.say(WELCOME_MESSAGE)
 
     except Exception as exc:
         log_session_error(exc, context="pipeline setup")
         raise
 
 
-# ---------------------------------------------------------------------------
-# CLI entrypoint
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     cli.run_app(server)

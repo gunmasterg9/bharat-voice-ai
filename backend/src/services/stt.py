@@ -51,9 +51,7 @@ def create_stt(config: DeepgramConfig):
             "Failed to import livekit.plugins.deepgram. "
             "Ensure 'livekit-agents[deepgram]' is installed."
         )
-        raise ImportError(
-            "livekit-agents[deepgram] is required for Deepgram STT"
-        )
+        raise ImportError("livekit-agents[deepgram] is required for Deepgram STT")
 
     try:
         logger.info("Creating Deepgram STT: model=%s", config.model)
@@ -73,7 +71,4 @@ def create_stt(config: DeepgramConfig):
 
     except Exception as exc:
         logger.error("Failed to create Deepgram STT: %s", str(exc))
-        raise RuntimeError(
-            f"Deepgram STT initialization failed: {exc}"
-        ) from exc
-
+        raise RuntimeError(f"Deepgram STT initialization failed: {exc}") from exc

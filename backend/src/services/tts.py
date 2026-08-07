@@ -42,12 +42,9 @@ def create_tts(config: MurfConfig):
     """
     if murf is None:
         logger.error(
-            "Failed to import livekit.plugins.murf. "
-            "Ensure 'livekit-murf' is installed."
+            "Failed to import livekit.plugins.murf. Ensure 'livekit-murf' is installed."
         )
-        raise ImportError(
-            "livekit-murf is required for Murf Falcon TTS"
-        )
+        raise ImportError("livekit-murf is required for Murf Falcon TTS")
 
     try:
         logger.info(
@@ -72,15 +69,10 @@ def create_tts(config: MurfConfig):
 
     except ImportError as exc:
         logger.error(
-            "Failed to import livekit.plugins.murf. "
-            "Ensure 'livekit-murf' is installed."
+            "Failed to import livekit.plugins.murf. Ensure 'livekit-murf' is installed."
         )
-        raise ImportError(
-            "livekit-murf is required for Murf Falcon TTS"
-        ) from exc
+        raise ImportError("livekit-murf is required for Murf Falcon TTS") from exc
 
     except Exception as exc:
         logger.error("Failed to create Murf Falcon TTS: %s", str(exc))
-        raise RuntimeError(
-            f"Murf Falcon TTS initialization failed: {exc}"
-        ) from exc
+        raise RuntimeError(f"Murf Falcon TTS initialization failed: {exc}") from exc

@@ -1,8 +1,8 @@
 """
-Bharat Voice AI — Conversation Memory Store
+Bharat Voice AI — Enhanced Conversation Memory Store
 
 Provides persistent conversation history and session memory management.
-Stores conversation turns, user context, and preferences to disk (JSON/SQLite).
+Stores conversation turns, user name, preferred language, current topic, and last response.
 """
 
 from __future__ import annotations
@@ -33,10 +33,14 @@ class ConversationTurn:
 
 @dataclass
 class SessionMemory:
-    """Session state and history for a participant."""
+    """Enhanced session state and history for a participant."""
 
     session_id: str
     user_id: str = "default_user"
+    user_name: str | None = None
+    preferred_language: str | None = None
+    current_topic: str | None = None
+    last_response: str | None = None
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -45,9 +49,7 @@ class SessionMemory:
 
 
 class ConversationMemoryStore:
-    """
-    Manages loading, persisting, and querying conversation history.
-    """
+    """Manages loading, persisting, and querying enhanced session memory."""
 
     def __init__(self, memory_dir: Path | str = DEFAULT_MEMORY_DIR) -> None:
         self.memory_dir = Path(memory_dir)
@@ -71,10 +73,16 @@ class ConversationMemoryStore:
     def add_turn(
         self, session_id: str, role: str, content: str, language: str | None = None
     ) -> None:
-        """Add a user or assistant turn to the conversation history."""
+        """Add a turn to conversation history and update state."""
         session = self.get_or_create_session(session_id)
         turn = ConversationTurn(role=role, content=content, language=language)
         session.turns.append(turn)
+
+        if role == "assistant":
+            session.last_response = content
+        if language:
+            session.preferred_language = language
+
         logger.info(
             "Added %s turn to session %s (total turns: %d)",
             role,
@@ -82,6 +90,37 @@ class ConversationMemoryStore:
             len(session.turns),
         )
         self.save_session(session_id)
+
+    def set_user_name(self, session_id: str, name: str) -> None:
+        """Set or update user's name in memory."""
+        session = self.get_or_create_session(session_id)
+        session.user_name = name.strip().title()
+        self.save_session(session_id)
+
+    def set_topic(self, session_id: str, topic: str) -> None:
+        """Set current conversation topic in memory."""
+        session = self.get_or_create_session(session_id)
+        session.current_topic = topic.strip()
+        self.save_session(session_id)
+
+    def get_context_summary(self, session_id: str) -> str:
+        """Get formatted context summary string for system prompt injection."""
+        session = self.get_or_create_session(session_id)
+        parts = []
+
+        if session.user_name:
+            parts.append(f"User Name: {session.user_name}")
+        if session.preferred_language:
+            parts.append(f"Preferred Language: {session.preferred_language}")
+        if session.current_topic:
+            parts.append(f"Current Topic: {session.current_topic}")
+        if session.last_response:
+            parts.append(f"Last Response Spoken: {session.last_response}")
+
+        if not parts:
+            return ""
+
+        return "[CONVERSATION CONTEXT MEMORY]\n" + "\n".join(parts)
 
     def get_formatted_history(self, session_id: str, max_turns: int = 10) -> str:
         """Get formatted conversation history string for context injection."""
@@ -127,6 +166,10 @@ class ConversationMemoryStore:
         return SessionMemory(
             session_id=data.get("session_id", "unknown"),
             user_id=data.get("user_id", "default_user"),
+            user_name=data.get("user_name"),
+            preferred_language=data.get("preferred_language"),
+            current_topic=data.get("current_topic"),
+            last_response=data.get("last_response"),
             created_at=data.get("created_at", ""),
             turns=turns,
             metadata=data.get("metadata", {}),

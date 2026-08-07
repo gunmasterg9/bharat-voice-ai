@@ -71,9 +71,7 @@ def measure_time(func: Callable[..., T]) -> Callable[..., T]:
         try:
             result = func(*args, **kwargs)
             elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.debug(
-                "%s completed in %.1fms", func.__name__, elapsed_ms
-            )
+            logger.debug("%s completed in %.1fms", func.__name__, elapsed_ms)
             return result
         except Exception as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000
@@ -107,9 +105,7 @@ def measure_time_async(
         try:
             result = await func(*args, **kwargs)
             elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.debug(
-                "%s completed in %.1fms", func.__name__, elapsed_ms
-            )
+            logger.debug("%s completed in %.1fms", func.__name__, elapsed_ms)
             return result
         except Exception as exc:
             elapsed_ms = (time.perf_counter() - start) * 1000
