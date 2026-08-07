@@ -136,7 +136,7 @@ async def test_offers_assistance_llm() -> None:
             .judge(
                 llm,
                 intent="""
-                Greets the user in a friendly manner as Bharat Voice AI and offers assistance in multiple languages.
+                Greets the user in a friendly manner as Bharat Voice AI and offers assistance.
                 """,
             )
         )

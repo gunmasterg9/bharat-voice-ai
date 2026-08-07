@@ -21,7 +21,7 @@ logger = get_logger(COMPONENT_CONFIG)
 # Defaults
 # ---------------------------------------------------------------------------
 DEFAULT_STT_MODEL = "nova-3"
-DEFAULT_LLM_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_LLM_MODEL = "gemini-2.0-flash"
 DEFAULT_TTS_VOICE = "Pooja"
 DEFAULT_TTS_LOCALE = "en-IN"
 DEFAULT_TTS_STYLE = "Conversation"
@@ -165,9 +165,10 @@ def load_settings(env_file: str = ".env.local") -> Settings:
     gemini_api_key = (
         os.environ.get("GOOGLE_API_KEY", "").strip()
         or os.environ.get("GEMINI_API_KEY", "").strip()
+        or os.environ.get("OPENAI_API_KEY", "").strip()
     )
     if not gemini_api_key:
-        missing_keys.append("GOOGLE_API_KEY (or GEMINI_API_KEY)")
+        missing_keys.append("GOOGLE_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY")
 
     murf_api_key = _require("MURF_API_KEY")
 
