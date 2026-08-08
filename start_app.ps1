@@ -25,10 +25,10 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $localExe = Join-Path $repoRoot "livekit-server.exe"
 if (Test-Path $localExe) {
   Write-Host "Found local livekit-server.exe in root directory. Starting local LiveKit server..."
-  Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; .\livekit-server.exe --dev"
+  Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; .\livekit-server.exe --dev --keys 'devkey: secret'"
 } elseif (Test-CommandExists "livekit-server") {
   Write-Host "Found livekit-server in system PATH. Starting local LiveKit server..."
-  Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; livekit-server --dev"
+  Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; livekit-server --dev --keys 'devkey: secret'"
 } else {
   Write-Warning "livekit-server was not found. Using configured LIVEKIT_URL."
 }

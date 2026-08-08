@@ -34,20 +34,20 @@ export interface AppConfig {
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
   companyName: 'Bharat Voice AI',
-  pageTitle: 'Bharat Voice AI — Multilingual Assistant',
+  pageTitle: 'Bharat Voice AI — Voice for Bharat',
   pageDescription:
-    'A multilingual AI voice assistant for India, powered by Murf Falcon TTS, Deepgram STT, and Google Gemini',
+    'Talk naturally with an AI assistant built for India. Powered by Murf Falcon TTS, Deepgram STT, and Google Gemini.',
 
   supportsChatInput: true,
-  supportsVideoInput: true,
-  supportsScreenShare: true,
+  supportsVideoInput: false,
+  supportsScreenShare: false,
   isPreConnectBufferEnabled: true,
 
   logo: '/murf-logo.svg',
-  accent: '#6366F1',
+  accent: '#F59E0B',
   logoDark: '/murf-logo-dark.svg',
-  accentDark: '#818cf8',
-  startButtonText: 'Start Talking',
+  accentDark: '#F59E0B',
+  startButtonText: 'Start Conversation',
 
   // optional: audio visualization configuration
   // audioVisualizerType: 'bar',

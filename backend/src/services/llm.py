@@ -58,6 +58,10 @@ def create_llm(config: GeminiConfig):
             return create_pipeline_llm(config)
         except Exception as exc:
             logger.warning("Failed to initialize Gemini LLM: %s", str(exc))
+    else:
+        logger.warning(
+            "GOOGLE_API_KEY does not start with 'AIzaSy'. Please verify your Gemini API key in backend/.env.local (from https://aistudio.google.com/app/apikey)."
+        )
 
     # Priority 3: OpenAI LLM fallback
     if openai_key and openai is not None:
