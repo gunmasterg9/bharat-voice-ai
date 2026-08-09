@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Mic, Radio, Sparkles } from 'lucide-react';
+import { Mic, Radio, ShieldCheck, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 
 interface HeaderProps {
@@ -38,7 +38,7 @@ export function Header({ status }: HeaderProps) {
               </h1>
               <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                 <Sparkles className="mr-1 h-3 w-3" />
-                Day 3
+                Day 4
               </span>
             </div>
             <p className="text-muted-foreground hidden text-xs sm:block">
@@ -47,8 +47,14 @@ export function Header({ status }: HeaderProps) {
           </div>
         </div>
 
-        {/* Status Indicator & Theme Toggle */}
-        <div className="flex items-center space-x-3">
+        {/* Status Indicator, Memory Badge & Theme Toggle */}
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Memory Status Badge (Integrated cleanly in header navbar) */}
+          <div className="flex items-center space-x-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+            <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
+            <span>Memory: Active</span>
+          </div>
+
           {/* Connection Status Pill */}
           <div className="border-border/60 bg-muted/50 text-foreground flex items-center space-x-2 rounded-full border px-3 py-1 text-xs font-medium">
             <Radio

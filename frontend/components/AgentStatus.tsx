@@ -15,9 +15,10 @@ export type AgentUIState =
 interface AgentStatusProps {
   status: AgentUIState;
   detectedLanguage?: string;
+  micLabel?: string;
 }
 
-export function AgentStatus({ status, detectedLanguage }: AgentStatusProps) {
+export function AgentStatus({ status, detectedLanguage, micLabel }: AgentStatusProps) {
   const renderStateDetails = () => {
     switch (status) {
       case 'READY':
@@ -110,6 +111,11 @@ export function AgentStatus({ status, detectedLanguage }: AgentStatusProps) {
         >
           {details.badge}
         </span>
+        {micLabel && (
+          <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 sm:px-3 sm:py-1 dark:text-amber-400">
+            Mic: {micLabel}
+          </span>
+        )}
         {detectedLanguage && (
           <span className="inline-flex items-center rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-semibold text-indigo-600 sm:px-3 sm:py-1 dark:text-indigo-400">
             Language: {detectedLanguage}

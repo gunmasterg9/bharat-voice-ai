@@ -3,10 +3,12 @@ Bharat Voice AI — Voice Agent
 
 The core BharatVoiceAgent class extending LiveKit's Agent.
 Handles conversational AI logic, guardrails, language detection & style mirroring,
-silence management, function tools, and session memory.
+silence management, Day 1 function tools, and Day 4 SQLite persistent memory tools.
 """
 
 from __future__ import annotations
+
+import json
 
 from livekit.agents import Agent, RunContext, function_tool
 
@@ -25,33 +27,48 @@ from agent.prompts import (
     SILENCE_PROMPT_2,
     SYSTEM_PROMPT,
 )
+from memory.memory_service import SENSITIVE_KEYWORDS, get_memory_service
+from services.knowledge_base import get_knowledge_base_service
 
 logger = get_logger(COMPONENT_AGENT)
 
 
 class BharatVoiceAgent(Agent):
     """
-    Bharat Voice AI — Multilingual Conversational Agent (Day 2 Production Architecture).
+    Bharat Voice AI — Multilingual Conversational Agent with Persistent Memory (Day 4 Architecture).
 
     Extends LiveKit's Agent with:
-    - Structured Day 2 System Prompt with female persona & Hindi/Gujarati gender agreement
+    - Structured Day 4 System Prompt with female persona & Hindi/Gujarati gender agreement
     - Input safety guardrails & prohibited claims filtering
     - Automatic language detection (English, Hindi, Gujarati, Hinglish, Gujlish) & style mirroring
     - Reusable escalation script handling
-    - Session context & memory store integration
+    - Session context & SQLite persistent memory store integration
     - Silence handling support ("Are you still there?")
     - Day 1 Function tools (Weather, News, Translation)
+    - Day 4 Memory tools (lookup_caller, save_caller_memory, forget_caller)
     """
 
-    def __init__(self, session_id: str = "default_session") -> None:
-        """Initialize the agent with system instructions and session context."""
-        super().__init__(instructions=SYSTEM_PROMPT)
+    def __init__(
+        self,
+        session_id: str = "default_session",
+        user_id: str = "default_user",
+        instructions: str | None = None,
+    ) -> None:
+        """Initialize the agent with system instructions, session context, and persistent SQLite memory."""
+        super().__init__(instructions=instructions or SYSTEM_PROMPT)
         self.session_id = session_id
-        self.memory = memory_store.get_or_create_session(session_id)
+        self.user_id = user_id
+        self.memory = memory_store.get_or_create_session(session_id, user_id=user_id)
+        self.db_memory = get_memory_service()
         self.silence_count = 0
+
+        # Update last interaction timestamp in SQLite for returning user
+        self.db_memory.update_last_interaction(self.user_id)
+
         logger.info(
-            "BharatVoiceAgent initialized with Day 2 architecture for session: %s",
+            "BharatVoiceAgent initialized for session: %s, user_id: %s",
             session_id,
+            user_id,
         )
 
     async def process_user_turn(self, user_text: str) -> str:
@@ -79,7 +96,7 @@ class BharatVoiceAgent(Agent):
         profile = language_detector.detect(user_text)
         log_language_detection(profile.code, profile.name)
 
-        # 3. Store user turn in persistent memory
+        # 3. Store user turn in in-memory session history
         memory_store.add_turn(
             session_id=self.session_id,
             role="user",
@@ -102,12 +119,16 @@ class BharatVoiceAgent(Agent):
         # Filter output for prohibited claims
         safe_response = guardrail_engine.filter_output_claims(assistant_text)
 
-        # Update persistent memory
+        # Update session memory turn
         memory_store.add_turn(
             session_id=self.session_id,
             role="assistant",
             content=safe_response,
         )
+
+        # Touch last_interaction in database
+        self.db_memory.update_last_interaction(self.user_id)
+
         return safe_response
 
     def handle_silence(self) -> str:
@@ -124,6 +145,187 @@ class BharatVoiceAgent(Agent):
             return SILENCE_PROMPT_1
         else:
             return SILENCE_PROMPT_2
+
+    # -----------------------------------------------------------------
+    # Day 4 Persistent Memory Agent Tools
+    # -----------------------------------------------------------------
+
+    @function_tool
+    async def lookup_caller(
+        self,
+        context: RunContext,
+        user_id: str = "",
+    ) -> str:
+        """
+        Retrieve stored caller profile from SQLite database.
+
+        Args:
+            user_id: The unique caller identifier.
+
+        Returns:
+            JSON summary of caller profile or 'PROFILE_NOT_FOUND'.
+        """
+        target_id = self.user_id
+        logger.info("[MEMORY DEBUG] LOOKUP START for user_id = %s", target_id)
+
+        user = self.db_memory.get_user(target_id)
+        if not user:
+            logger.info("[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id = %s", target_id)
+            return "PROFILE_NOT_FOUND"
+
+        logger.info("[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id = %s: %s", target_id, json.dumps(user, ensure_ascii=False))
+        profile_summary = {
+            "name": user.get("name"),
+            "language_preference": user.get("language_preference"),
+            "relevant_facts": user.get("facts", {}),
+            "last_interaction": user.get("last_interaction"),
+        }
+        return json.dumps(profile_summary, ensure_ascii=False)
+
+    @function_tool
+    async def save_caller_memory(
+        self,
+        context: RunContext,
+        user_id: str = "",
+        name: str | None = None,
+        language_preference: str | None = None,
+        facts: str | None = None,
+        user_consent: bool = False,
+    ) -> str:
+        """
+        Persist caller information to SQLite database after explicit user consent.
+
+        Args:
+            user_id: The persistent caller identifier.
+            name: Caller's name if voluntarily provided and consented.
+            language_preference: Preferred language (e.g. 'Hindi', 'Gujarati', 'English').
+            facts: Non-sensitive caller facts as a string or JSON string (e.g. 'topic: technology').
+            user_consent: MUST be set to True only after the caller explicitly grants permission.
+        """
+        target_id = self.user_id
+
+        logger.info("[MEMORY DEBUG] SAVE START")
+        logger.info("[MEMORY DEBUG] SAVE USER ID = %s, consent=%s", target_id, user_consent)
+
+        if not user_consent:
+            logger.warning("[MEMORY DEBUG] SAVE REJECTED: missing explicit user_consent")
+            return "Action blocked: Caller information can only be saved after explicit user consent."
+
+        # Enforce safety check against sensitive credentials
+        combined_check = f"{name or ''} {facts or ''}".lower()
+        if any(kw in combined_check for kw in SENSITIVE_KEYWORDS):
+            logger.warning("[MEMORY DEBUG] SAVE REJECTED: sensitive information detected")
+            return "Action blocked: Cannot save sensitive credentials (PINs, passwords, OTPs, bank/card details)."
+
+        # Parse facts string into dict if JSON
+        parsed_facts = {}
+        if facts:
+            try:
+                parsed_facts = json.loads(facts)
+            except Exception:
+                parsed_facts = {"general_preference": facts}
+
+        # Auto-detect language preference from recent user turns if not explicitly specified
+        if not language_preference and self.memory and self.memory.turns:
+            user_text_combined = " ".join([t.content.lower() for t in self.memory.turns if t.role == "user"])
+            if "gujarati" in user_text_combined or "gujarat" in user_text_combined:
+                language_preference = "Gujarati"
+            elif "hindi" in user_text_combined:
+                language_preference = "Hindi"
+            elif "english" in user_text_combined:
+                language_preference = "English"
+            else:
+                user_turns = [t for t in self.memory.turns if t.role == "user" and t.language]
+                if user_turns:
+                    last_lang = user_turns[-1].language
+                    lang_map = {
+                        "hi": "Hindi",
+                        "gu": "Gujarati",
+                        "hinglish": "Hinglish",
+                        "gujlish": "Gujlish",
+                        "en": "English",
+                    }
+                    language_preference = lang_map.get(last_lang, "Hindi")
+
+        updated_user = self.db_memory.save_user(
+            user_id=target_id,
+            name=name,
+            language_preference=language_preference,
+            facts=parsed_facts,
+        )
+
+        if updated_user:
+            logger.info("[MEMORY DEBUG] SAVE SUCCESS")
+            logger.info("[MEMORY DEBUG] COMMIT SUCCESS")
+
+            # Perform immediate lookup to verify write
+            verify_read = self.db_memory.get_user(target_id)
+            if verify_read:
+                logger.info("[MEMORY DEBUG] VERIFY AFTER SAVE = FOUND: %s", json.dumps(verify_read, ensure_ascii=False))
+            else:
+                logger.error("[MEMORY DEBUG] VERIFY AFTER SAVE = FAILED for user_id = %s", target_id)
+
+            return f"Successfully saved caller information for future conversations. Name: {name or 'Not specified'}, Language: {language_preference or 'Not specified'}."
+
+        return "Failed to save caller profile due to a database error."
+
+    @function_tool
+    async def forget_caller(
+        self,
+        context: RunContext,
+        user_id: str,
+        user_confirmation: bool = False,
+    ) -> str:
+        """
+        Delete stored caller profile completely from database upon explicit user confirmation.
+
+        Args:
+            user_id: The unique caller identifier.
+            user_confirmation: MUST be set to True only after user explicitly confirms deletion.
+        """
+        logger.info(
+            "Tool Execution: forget_caller for user_id '%s', confirmation=%s",
+            user_id,
+            user_confirmation,
+        )
+
+        if not user_confirmation:
+            return "Action blocked: Deletion requires explicit user confirmation."
+
+        if not user_id or str(user_id).lower() in ["anonymous", "user", "default_user", "caller"]:
+            user_id = self.user_id
+
+        success = self.db_memory.delete_user(user_id)
+        if success:
+            return "Done. I've removed your saved information."
+        return "No stored profile found to delete or database operation failed."
+
+    @function_tool
+    async def query_knowledge_base(
+        self,
+        context: RunContext,
+        query: str,
+        track: str | None = None,
+    ) -> str:
+        """
+        Search official RAG knowledge base for grounded scheme PDFs, crop advisories, and track documents.
+
+        Args:
+            query: The user's query topic (e.g. 'cotton pink bollworm spraying', 'PMJJBY eligibility').
+            track: Optional domain track ('Farm & Field', 'Financial Services', 'Health Access', 'Learning & Literacy', 'Disaster Response').
+        """
+        logger.info("Tool Execution: query_knowledge_base for query '%s', track '%s'", query, track)
+        kb_service = get_knowledge_base_service()
+        results = kb_service.search(query=query, track=track, top_k=2)
+
+        if not results:
+            return f"No official knowledge base documents found for query: '{query}'."
+
+        snippets = []
+        for r in results:
+            snippets.append(f"Document [{r['title']}] ({r['track']}): {r['grounded_content']}")
+
+        return "\n\n".join(snippets)
 
     # -----------------------------------------------------------------
     # Day 1 Function Tools (Preserved 100%)

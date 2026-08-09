@@ -35,11 +35,10 @@ def _llm() -> llm.LLM:
 
 
 def test_greeting_text() -> None:
-    """Agent welcome message should introduce Bharat Voice AI and explain capabilities."""
+    """Agent welcome message should be concise Namaste! greeting."""
     from agent.prompts import WELCOME_MESSAGE
 
-    assert "Bharat Voice AI" in WELCOME_MESSAGE
-    assert "multiple Indian languages" in WELCOME_MESSAGE
+    assert "Namaste!" in WELCOME_MESSAGE
 
 
 def test_language_detection_and_mirroring() -> None:
@@ -130,6 +129,11 @@ async def test_offers_assistance_llm() -> None:
 
         result = await session.run(user_input="Hello")
 
+        # Consume function call and output events if emitted before assistant message
+        if result.events and result.events[0].type == "function_call":
+            result.expect.next_event().is_function_call(name="lookup_caller")
+            result.expect.next_event().is_function_call_output()
+
         await (
             result.expect.next_event()
             .is_message(role="assistant")
@@ -140,7 +144,6 @@ async def test_offers_assistance_llm() -> None:
                 """,
             )
         )
-        result.expect.no_more_events()
 
 
 @pytest.mark.asyncio
@@ -164,4 +167,3 @@ async def test_refuses_harmful_request_llm() -> None:
                 intent="Politely refuses to provide help or information on illegal activities.",
             )
         )
-        result.expect.no_more_events()

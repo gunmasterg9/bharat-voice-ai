@@ -54,15 +54,80 @@ export function VoiceAgent() {
     }
   }, [session.isConnected, session.isConnecting, session.error, agent.state, uiState]);
 
+  // State for active detected microphone label
+  const [activeMicLabel, setActiveMicLabel] = useState<string>('Default Microphone');
+
+  // Automatic microphone detection & enumeration
+  const detectMicrophones = useCallback(async () => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      return;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((device) => device.kind === 'audioinput');
+
+      if (audioInputs.length > 0) {
+        // Pick default or first labeled microphone device
+        const activeDevice = audioInputs.find((d) => d.deviceId === 'default') || audioInputs[0];
+        const label = activeDevice.label || `Microphone (${audioInputs.length} detected)`;
+        setActiveMicLabel(label);
+        console.log('Automatically detected microphone:', label, audioInputs);
+      } else {
+        setActiveMicLabel('No microphone detected');
+      }
+    } catch (err) {
+      console.warn('Microphone device enumeration failed:', err);
+    }
+  }, []);
+
+  // Listen for device changes (plugging/unplugging headsets or USB mics)
+  useEffect(() => {
+    detectMicrophones();
+    if (typeof window !== 'undefined' && navigator.mediaDevices?.addEventListener) {
+      const handleDeviceChange = () => detectMicrophones();
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+      return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      };
+    }
+  }, [detectMicrophones]);
+
   // Request & verify microphone permissions before connecting
-  const checkMicrophonePermission = async (): Promise<boolean> => {
+  const checkMicrophonePermission = useCallback(async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setUiState('PERMISSION_ERROR');
       return false;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream: MediaStream;
+      try {
+        // First try requesting ideal default audio input
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err: unknown) {
+          if (
+            err instanceof DOMException &&
+            (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError')
+          ) {
+            console.warn(
+              'OverconstrainedError encountered, falling back to basic unconstrained audio:',
+              err
+            );
+            stream = await navigator.mediaDevices.getUserMedia({ audio: {} });
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      // Re-run detection to get exact device label after permission is granted
+      await detectMicrophones();
+
       // Stop temporary track immediately after verification
       stream.getTracks().forEach((track) => track.stop());
       return true;
@@ -71,7 +136,7 @@ export function VoiceAgent() {
       setUiState('PERMISSION_ERROR');
       return false;
     }
-  };
+  }, [detectMicrophones]);
 
   // Start Call Handler
   const handleStartCall = useCallback(async () => {
@@ -86,12 +151,25 @@ export function VoiceAgent() {
     try {
       await session.start();
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('engine not connected') || msg.includes('PublishTrackError')) {
+        console.warn(
+          'PublishTrackError caught during WebRTC connection warmup, retrying session start...',
+          err
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+          await session.start();
+          return;
+        } catch (retryErr) {
+          console.error('Retry start session failed:', retryErr);
+        }
+      }
       console.error('Failed to start session:', err);
       setUiState('CONNECTION_ERROR');
-      const msg = err instanceof Error ? err.message : 'Failed to start LiveKit voice session.';
-      setErrorMessage(msg);
+      setErrorMessage(msg || 'Failed to start LiveKit voice session.');
     }
-  }, [session]);
+  }, [checkMicrophonePermission, session]);
 
   // End Call Handler
   const handleEndCall = useCallback(() => {
@@ -121,7 +199,7 @@ export function VoiceAgent() {
           <div className="grid w-full max-w-5xl grid-cols-1 items-start gap-4 md:grid-cols-12 md:gap-6">
             {/* Left Column: Status, Visualizer, Control Bar */}
             <div className="flex flex-col items-center justify-center space-y-2 sm:space-y-3 md:col-span-6">
-              <AgentStatus status={uiState} />
+              <AgentStatus status={uiState} micLabel={activeMicLabel} />
               <AudioVisualizer status={uiState} />
               <div className="w-full max-w-md pt-1">
                 <AgentControlBar
@@ -151,7 +229,7 @@ export function VoiceAgent() {
           /* Centered single-column layout before call / on error / after call */
           <div className="w-full max-w-3xl space-y-2 text-center sm:space-y-4">
             {/* Active Agent Status Header */}
-            <AgentStatus status={uiState} />
+            <AgentStatus status={uiState} micLabel={activeMicLabel} />
 
             {/* Central Visualizer Area */}
             {uiState !== 'PERMISSION_ERROR' && uiState !== 'CONNECTION_ERROR' && (

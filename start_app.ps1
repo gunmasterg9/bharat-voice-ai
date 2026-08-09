@@ -21,13 +21,24 @@ if (-not (Test-CommandExists "pnpm")) {
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Start LiveKit local server if executable exists in root or PATH
+# Check if using LiveKit Cloud or Local LiveKit server
+$backendEnvPath = Join-Path $repoRoot "backend\.env.local"
+$isCloudLiveKit = $false
+if (Test-Path $backendEnvPath) {
+  $envContent = Get-Content $backendEnvPath -Raw
+  if ($envContent -like "*livekit.cloud*") {
+    $isCloudLiveKit = $true
+  }
+}
+
 $localExe = Join-Path $repoRoot "livekit-server.exe"
-if (Test-Path $localExe) {
-  Write-Host "Found local livekit-server.exe in root directory. Starting local LiveKit server..."
+if ($isCloudLiveKit) {
+  Write-Host "Using configured LiveKit Cloud server from .env.local" -ForegroundColor Cyan
+} elseif (Test-Path $localExe) {
+  Write-Host "Found local livekit-server.exe in root directory. Starting local LiveKit server..." -ForegroundColor Yellow
   Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; .\livekit-server.exe --dev --keys 'devkey: secret'"
 } elseif (Test-CommandExists "livekit-server") {
-  Write-Host "Found livekit-server in system PATH. Starting local LiveKit server..."
+  Write-Host "Found livekit-server in system PATH. Starting local LiveKit server..." -ForegroundColor Yellow
   Start-Process powershell -ArgumentList "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", "Set-Location '$repoRoot'; livekit-server --dev --keys 'devkey: secret'"
 } else {
   Write-Warning "livekit-server was not found. Using configured LIVEKIT_URL."
