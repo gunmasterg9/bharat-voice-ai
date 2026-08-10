@@ -88,6 +88,19 @@
 - **Returning Caller Experience:** Greets returning farmers by name and resumes context:
   > *"Namaste Ramesh! Last time we spoke about your cotton crop in Ahmedabad. Did the pest spraying help?"*
 
+### 🛠️ Day 5: Real-Time External Tools (Weather Lookup)
+- **Live Data Integration:** Teaches Bharat Voice AI to use a real external tool (`get_weather`) powered by **Open-Meteo REST API** for live weather queries instead of static LLM training data.
+- **Automatic Tool Invocation:** The agent automatically detects live weather queries (*"What's the weather in Veraval today?"*, *"Will it rain tomorrow in Ahmedabad?"*, *"વેરાવળમાં આજે હવામાન કેવું છે?"*) and invokes `get_weather`.
+- **Location Resolution & Memory Synergy:**
+  - Supports Indian cities and districts (e.g., Veraval, Gir Somnath, Ahmedabad, Rajkot, Mumbai, Delhi).
+  - If no location is specified in the query (*"What's the weather today?"*), the tool automatically checks the caller's Day 4 saved SQLite profile for a stored location before asking the user to clarify.
+- **Structured Data & Failure Handling:**
+  - Returns structured JSON payloads (`success: true/false`, temperature, feels like, condition, precipitation probability, wind speed).
+  - Bounded by a **5.0-second network timeout**.
+  - On API failure or DNS error, the agent speaks a graceful fallback message (*"Sorry, I couldn't retrieve the latest weather information right now."*) and **never** hallucinates weather numbers.
+- **Multilingual Spoken Responses:** Converts structured tool results into natural spoken text in Devanagari script for Hindi, Gujarati script for Gujarati, and Latin script for English using probabilistic language for forecasts.
+
+
 ---
 
 ## 📂 Repository Structure

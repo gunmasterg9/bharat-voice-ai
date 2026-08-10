@@ -33,7 +33,12 @@ async def lookup_caller_tool(agent: Any, context: RunContext, user_id: str) -> s
         JSON summary of caller profile or 'PROFILE_NOT_FOUND'.
     """
     db_memory = get_memory_service()
-    if not user_id or str(user_id).lower() in ["anonymous", "user", "default_user", "caller"]:
+    if not user_id or str(user_id).lower() in [
+        "anonymous",
+        "user",
+        "default_user",
+        "caller",
+    ]:
         user_id = agent.user_id
 
     logger.info("[MEMORY] LOOKUP START for user_id: %s", user_id)
@@ -73,14 +78,21 @@ async def save_caller_memory_tool(
         facts: Non-sensitive caller facts as a string or JSON string.
         user_consent: MUST be set to True only after the caller explicitly grants permission.
     """
-    logger.info("[MEMORY] SAVE START for user_id: %s, consent=%s", user_id, user_consent)
+    logger.info(
+        "[MEMORY] SAVE START for user_id: %s, consent=%s", user_id, user_consent
+    )
 
     if not user_consent:
         logger.warning("[MEMORY] SAVE REJECTED: missing explicit user_consent")
         return "Action blocked: Caller information can only be saved after explicit user consent."
 
     db_memory = get_memory_service()
-    if not user_id or str(user_id).lower() in ["anonymous", "user", "default_user", "caller"]:
+    if not user_id or str(user_id).lower() in [
+        "anonymous",
+        "user",
+        "default_user",
+        "caller",
+    ]:
         user_id = agent.user_id
 
     # Enforce safety check against sensitive credentials
@@ -97,7 +109,12 @@ async def save_caller_memory_tool(
             parsed_facts = {"general_preference": facts}
 
     # Auto-detect language preference from recent user turns if missing
-    if not language_preference and hasattr(agent, "memory") and agent.memory and agent.memory.turns:
+    if (
+        not language_preference
+        and hasattr(agent, "memory")
+        and agent.memory
+        and agent.memory.turns
+    ):
         user_turns = [t for t in agent.memory.turns if t.role == "user" and t.language]
         if user_turns:
             last_lang = user_turns[-1].language
@@ -140,13 +157,22 @@ async def forget_caller_tool(
         user_id: The unique caller identifier.
         user_confirmation: MUST be set to True only after user explicitly confirms deletion.
     """
-    logger.info("[MEMORY] DELETE REQUEST for user_id: %s, confirmation=%s", user_id, user_confirmation)
+    logger.info(
+        "[MEMORY] DELETE REQUEST for user_id: %s, confirmation=%s",
+        user_id,
+        user_confirmation,
+    )
 
     if not user_confirmation:
         return "Action blocked: Deletion requires explicit user confirmation."
 
     db_memory = get_memory_service()
-    if not user_id or str(user_id).lower() in ["anonymous", "user", "default_user", "caller"]:
+    if not user_id or str(user_id).lower() in [
+        "anonymous",
+        "user",
+        "default_user",
+        "caller",
+    ]:
         user_id = agent.user_id
 
     success = db_memory.delete_user(user_id)

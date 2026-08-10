@@ -104,18 +104,24 @@ async def bharat_voice_session(ctx: JobContext) -> None:
         # Extract persistent participant identity (wait for participant to connect)
         participant_identity = None
         try:
-            participant = await asyncio.wait_for(ctx.wait_for_participant(), timeout=5.0)
+            participant = await asyncio.wait_for(
+                ctx.wait_for_participant(), timeout=5.0
+            )
             if participant and participant.identity:
                 participant_identity = participant.identity
         except Exception:
-            logger.warning("Timed out waiting for remote participant, checking room remote_participants...")
+            logger.warning(
+                "Timed out waiting for remote participant, checking room remote_participants..."
+            )
             if ctx.room.remote_participants:
                 p = next(iter(ctx.room.remote_participants.values()))
                 if p and p.identity:
                     participant_identity = p.identity
 
         # Crucial fix: NEVER fallback user_id to dynamic room.name (e.g. voice_assistant_room_XXXX)
-        if not participant_identity or participant_identity.startswith("voice_assistant_room_"):
+        if not participant_identity or participant_identity.startswith(
+            "voice_assistant_room_"
+        ):
             user_id = "default_user"
         else:
             user_id = participant_identity
@@ -135,7 +141,11 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             name = caller_profile["name"]
             lang = caller_profile.get("language_preference", "")
             facts = caller_profile.get("facts", {})
-            logger.info("[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id '%s': %s", user_id, json.dumps(caller_profile, ensure_ascii=False))
+            logger.info(
+                "[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id '%s': %s",
+                user_id,
+                json.dumps(caller_profile, ensure_ascii=False),
+            )
 
             profile_prompt_addon = (
                 f"\n\n[RECOGNIZED RETURNING CALLER PROFILE]\n"
@@ -156,7 +166,9 @@ async def bharat_voice_session(ctx: JobContext) -> None:
                 greeting = f"Namaste {name}! Welcome back. How can I help you today?"
             logger.info("Spoken returning caller greeting for '%s' (%s)", name, lang)
         else:
-            logger.info("[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id '%s'", user_id)
+            logger.info(
+                "[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id '%s'", user_id
+            )
             greeting = WELCOME_MESSAGE
 
         stt_service = create_stt(settings.deepgram)

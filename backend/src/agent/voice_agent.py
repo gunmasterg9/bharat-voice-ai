@@ -29,6 +29,7 @@ from agent.prompts import (
 )
 from memory.memory_service import SENSITIVE_KEYWORDS, get_memory_service
 from services.knowledge_base import get_knowledge_base_service
+from services.weather import get_weather_service
 
 logger = get_logger(COMPONENT_AGENT)
 
@@ -170,10 +171,16 @@ class BharatVoiceAgent(Agent):
 
         user = self.db_memory.get_user(target_id)
         if not user:
-            logger.info("[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id = %s", target_id)
+            logger.info(
+                "[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id = %s", target_id
+            )
             return "PROFILE_NOT_FOUND"
 
-        logger.info("[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id = %s: %s", target_id, json.dumps(user, ensure_ascii=False))
+        logger.info(
+            "[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id = %s: %s",
+            target_id,
+            json.dumps(user, ensure_ascii=False),
+        )
         profile_summary = {
             "name": user.get("name"),
             "language_preference": user.get("language_preference"),
@@ -205,16 +212,22 @@ class BharatVoiceAgent(Agent):
         target_id = self.user_id
 
         logger.info("[MEMORY DEBUG] SAVE START")
-        logger.info("[MEMORY DEBUG] SAVE USER ID = %s, consent=%s", target_id, user_consent)
+        logger.info(
+            "[MEMORY DEBUG] SAVE USER ID = %s, consent=%s", target_id, user_consent
+        )
 
         if not user_consent:
-            logger.warning("[MEMORY DEBUG] SAVE REJECTED: missing explicit user_consent")
+            logger.warning(
+                "[MEMORY DEBUG] SAVE REJECTED: missing explicit user_consent"
+            )
             return "Action blocked: Caller information can only be saved after explicit user consent."
 
         # Enforce safety check against sensitive credentials
         combined_check = f"{name or ''} {facts or ''}".lower()
         if any(kw in combined_check for kw in SENSITIVE_KEYWORDS):
-            logger.warning("[MEMORY DEBUG] SAVE REJECTED: sensitive information detected")
+            logger.warning(
+                "[MEMORY DEBUG] SAVE REJECTED: sensitive information detected"
+            )
             return "Action blocked: Cannot save sensitive credentials (PINs, passwords, OTPs, bank/card details)."
 
         # Parse facts string into dict if JSON
@@ -227,7 +240,9 @@ class BharatVoiceAgent(Agent):
 
         # Auto-detect language preference from recent user turns if not explicitly specified
         if not language_preference and self.memory and self.memory.turns:
-            user_text_combined = " ".join([t.content.lower() for t in self.memory.turns if t.role == "user"])
+            user_text_combined = " ".join(
+                [t.content.lower() for t in self.memory.turns if t.role == "user"]
+            )
             if "gujarati" in user_text_combined or "gujarat" in user_text_combined:
                 language_preference = "Gujarati"
             elif "hindi" in user_text_combined:
@@ -235,7 +250,9 @@ class BharatVoiceAgent(Agent):
             elif "english" in user_text_combined:
                 language_preference = "English"
             else:
-                user_turns = [t for t in self.memory.turns if t.role == "user" and t.language]
+                user_turns = [
+                    t for t in self.memory.turns if t.role == "user" and t.language
+                ]
                 if user_turns:
                     last_lang = user_turns[-1].language
                     lang_map = {
@@ -261,9 +278,15 @@ class BharatVoiceAgent(Agent):
             # Perform immediate lookup to verify write
             verify_read = self.db_memory.get_user(target_id)
             if verify_read:
-                logger.info("[MEMORY DEBUG] VERIFY AFTER SAVE = FOUND: %s", json.dumps(verify_read, ensure_ascii=False))
+                logger.info(
+                    "[MEMORY DEBUG] VERIFY AFTER SAVE = FOUND: %s",
+                    json.dumps(verify_read, ensure_ascii=False),
+                )
             else:
-                logger.error("[MEMORY DEBUG] VERIFY AFTER SAVE = FAILED for user_id = %s", target_id)
+                logger.error(
+                    "[MEMORY DEBUG] VERIFY AFTER SAVE = FAILED for user_id = %s",
+                    target_id,
+                )
 
             return f"Successfully saved caller information for future conversations. Name: {name or 'Not specified'}, Language: {language_preference or 'Not specified'}."
 
@@ -292,7 +315,12 @@ class BharatVoiceAgent(Agent):
         if not user_confirmation:
             return "Action blocked: Deletion requires explicit user confirmation."
 
-        if not user_id or str(user_id).lower() in ["anonymous", "user", "default_user", "caller"]:
+        if not user_id or str(user_id).lower() in [
+            "anonymous",
+            "user",
+            "default_user",
+            "caller",
+        ]:
             user_id = self.user_id
 
         success = self.db_memory.delete_user(user_id)
@@ -314,7 +342,11 @@ class BharatVoiceAgent(Agent):
             query: The user's query topic (e.g. 'cotton pink bollworm spraying', 'PMJJBY eligibility').
             track: Optional domain track ('Farm & Field', 'Financial Services', 'Health Access', 'Learning & Literacy', 'Disaster Response').
         """
-        logger.info("Tool Execution: query_knowledge_base for query '%s', track '%s'", query, track)
+        logger.info(
+            "Tool Execution: query_knowledge_base for query '%s', track '%s'",
+            query,
+            track,
+        )
         kb_service = get_knowledge_base_service()
         results = kb_service.search(query=query, track=track, top_k=2)
 
@@ -323,7 +355,9 @@ class BharatVoiceAgent(Agent):
 
         snippets = []
         for r in results:
-            snippets.append(f"Document [{r['title']}] ({r['track']}): {r['grounded_content']}")
+            snippets.append(
+                f"Document [{r['title']}] ({r['track']}): {r['grounded_content']}"
+            )
 
         return "\n\n".join(snippets)
 
@@ -332,28 +366,90 @@ class BharatVoiceAgent(Agent):
     # -----------------------------------------------------------------
 
     @function_tool
-    async def get_weather(self, context: RunContext, location: str) -> str:
+    async def get_weather(
+        self,
+        context: RunContext,
+        location: str = "",
+        forecast_days: int = 1,
+    ) -> str:
         """
-        Get current weather information for a city or region in India.
+        Retrieve live current or forecast weather data for a requested location in India or globally.
+
+        Use this tool ALWAYS whenever the user asks about current, today's, tomorrow's, or upcoming weather,
+        temperature, rain, precipitation, wind, or weather forecast for any location.
+        Do NOT use general LLM knowledge for current weather.
 
         Args:
-            location: The city or state name (e.g. 'Mumbai', 'Delhi', 'Bengaluru', 'Ahmedabad').
+            location: The city or region name (e.g. 'Veraval', 'Ahmedabad', 'Mumbai', 'Delhi').
+            forecast_days: Number of forecast days to retrieve (default: 1 for current/today).
+
+        Returns:
+            JSON string containing structured weather result or error status.
         """
-        logger.info("Tool Execution: get_weather for location '%s'", location)
-        city = location.strip().title()
+        logger.info("[TOOL] get_weather called")
+        logger.info("[TOOL] location = %s", location)
 
-        weather_data = {
-            "Delhi": "28°C, Partly Cloudy, Humidity 65%",
-            "Mumbai": "31°C, Humid with Light Breeze, Humidity 78%",
-            "Bengaluru": "24°C, Pleasant and Sunny, Humidity 52%",
-            "Chennai": "33°C, Warm and Humid, Humidity 80%",
-            "Kolkata": "30°C, Clear Sky, Humidity 70%",
-            "Hyderabad": "27°C, Mostly Clear, Humidity 60%",
-            "Ahmedabad": "32°C, Warm and Sunny, Humidity 55%",
-        }
+        target_location = location.strip() if location else ""
 
-        result = weather_data.get(city, f"26°C, Mild and Clear Sky in {city}")
-        return f"Current weather in {city}: {result}."
+        # Day 4 Memory Fallback: If no location provided or generic term, check saved caller profile
+        if not target_location or target_location.lower() in [
+            "today",
+            "current",
+            "now",
+            "here",
+            "my city",
+            "my location",
+        ]:
+            user_profile = self.db_memory.get_user(self.user_id)
+            if user_profile:
+                saved_facts = user_profile.get("facts", {})
+                saved_loc = (
+                    saved_facts.get("location")
+                    or saved_facts.get("city")
+                    or saved_facts.get("district")
+                )
+                if saved_loc:
+                    logger.info(
+                        "[TOOL] inferred location '%s' from saved caller profile for user_id '%s'",
+                        saved_loc,
+                        self.user_id,
+                    )
+                    target_location = str(saved_loc)
+
+        if not target_location or target_location.lower() in [
+            "today",
+            "current",
+            "now",
+            "here",
+            "my city",
+            "my location",
+        ]:
+            logger.warning("[TOOL] weather request failed: missing location")
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "missing_location",
+                    "message": "Location not specified and not found in saved profile. Ask the user which city they want weather for.",
+                },
+                ensure_ascii=False,
+            )
+
+        logger.info("[TOOL] weather request started for location '%s'", target_location)
+        weather_svc = get_weather_service()
+        result = await weather_svc.get_weather_data(
+            location=target_location, forecast_days=forecast_days
+        )
+
+        if result.get("success"):
+            logger.info("[TOOL] weather request successful for '%s'", target_location)
+        else:
+            logger.error(
+                "[TOOL] weather request failed for '%s': %s",
+                target_location,
+                result.get("error"),
+            )
+
+        return json.dumps(result, ensure_ascii=False)
 
     @function_tool
     async def get_latest_news(

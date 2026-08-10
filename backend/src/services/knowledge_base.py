@@ -37,7 +37,15 @@ KNOWLEDGE_BASE: list[KnowledgeDocument] = [
             "spray Profenofos 50% EC at 2ml/L water. Ensure spraying is done in early morning or evening. "
             "Maintain proper field sanitation and install pheromone traps at 2 traps per acre."
         ),
-        tags=["cotton", "pink bollworm", "spraying", "pest", "irrigation", "kheda", "crops"],
+        tags=[
+            "cotton",
+            "pink bollworm",
+            "spraying",
+            "pest",
+            "irrigation",
+            "kheda",
+            "crops",
+        ],
     ),
     KnowledgeDocument(
         doc_id="farm_pm_kisan_02",
@@ -48,7 +56,15 @@ KNOWLEDGE_BASE: list[KnowledgeDocument] = [
             "Small and marginal farmers holding cultivable land in their name qualify. Requires e-KYC completion and "
             "Aadhaar bank account seeding. Excludes institutional landholders and high income taxpayers."
         ),
-        tags=["pm-kisan", "pm kisan", "scheme", "farmer", "subsidy", "eligibility", "6000"],
+        tags=[
+            "pm-kisan",
+            "pm kisan",
+            "scheme",
+            "farmer",
+            "subsidy",
+            "eligibility",
+            "6000",
+        ],
     ),
     KnowledgeDocument(
         doc_id="fin_pmjjby_01",
@@ -59,7 +75,15 @@ KNOWLEDGE_BASE: list[KnowledgeDocument] = [
             "auto-debited from savings account. Eligible for individuals aged 18 to 50 years with a bank account. "
             "Cover period is June 1 to May 31 each year."
         ),
-        tags=["pmjjby", "life insurance", "insurance", "436", "lakh", "scheme", "financial"],
+        tags=[
+            "pmjjby",
+            "life insurance",
+            "insurance",
+            "436",
+            "lakh",
+            "scheme",
+            "financial",
+        ],
     ),
     KnowledgeDocument(
         doc_id="fin_kcc_02",
@@ -114,7 +138,9 @@ class KnowledgeBaseService:
     def __init__(self, documents: list[KnowledgeDocument] | None = None) -> None:
         self.documents = documents or KNOWLEDGE_BASE
 
-    def search(self, query: str, track: str | None = None, top_k: int = 2) -> list[dict[str, Any]]:
+    def search(
+        self, query: str, track: str | None = None, top_k: int = 2
+    ) -> list[dict[str, Any]]:
         """
         Search knowledge base for relevant grounded documents matching user query.
 
@@ -154,7 +180,11 @@ class KnowledgeBaseService:
         scores.sort(key=lambda x: x[0], reverse=True)
         top_results = scores[:top_k]
 
-        logger.info("Knowledge Base Search query='%s' found %d matching documents", query, len(top_results))
+        logger.info(
+            "Knowledge Base Search query='%s' found %d matching documents",
+            query,
+            len(top_results),
+        )
 
         return [
             {

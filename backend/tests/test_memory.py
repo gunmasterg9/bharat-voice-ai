@@ -187,8 +187,13 @@ def test_domain_track_facts_storage(memory_service):
     assert user["facts"]["farm_field"]["crops_grown"] == ["wheat", "mustard"]
     assert user["facts"]["health_access"]["age_band"] == "30-45"
     assert user["facts"]["learning_literacy"]["current_level"] == "intermediate"
-    assert user["facts"]["local_commerce"]["preferred_delivery_slot"] == "morning 9-11 AM"
-    assert user["facts"]["financial_services"]["eligibility_answers"] == "small farmer landholder eligible"
+    assert (
+        user["facts"]["local_commerce"]["preferred_delivery_slot"] == "morning 9-11 AM"
+    )
+    assert (
+        user["facts"]["financial_services"]["eligibility_answers"]
+        == "small farmer landholder eligible"
+    )
     assert user["facts"]["disaster_response"]["household_size"] == 4
 
 
@@ -282,4 +287,3 @@ async def test_rag_knowledge_base_retrieval():
     )
     assert "PMJJBY" in tool_res
     assert "₹436" in tool_res
-

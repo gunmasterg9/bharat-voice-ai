@@ -59,7 +59,9 @@ def test_database_initialization_and_path(persistent_test_db):
     assert persistent_test_db.is_file()
 
     db = Database(persistent_test_db)
-    rows = db.execute_read("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
+    rows = db.execute_read(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='users';"
+    )
     assert len(rows) == 1
     assert rows[0]["name"] == "users"
 
@@ -72,7 +74,9 @@ def test_crud_functions(persistent_test_db):
     user_id = "test_crud_user_01"
 
     # 2. create_user
-    user = service.create_user(user_id=user_id, name="Anish", language_preference="Hindi")
+    user = service.create_user(
+        user_id=user_id, name="Anish", language_preference="Hindi"
+    )
     assert user["user_id"] == user_id
     assert user["name"] == "Anish"
     assert user["language_preference"] == "Hindi"
@@ -137,8 +141,12 @@ def test_user_isolation(persistent_test_db):
     db = Database(persistent_test_db)
     service = MemoryService(db)
 
-    service.save_user_profile(user_id="user_a", name="Ramesh", language_preference="Gujarati")
-    service.save_user_profile(user_id="user_b", name="Amit", language_preference="Hindi")
+    service.save_user_profile(
+        user_id="user_a", name="Ramesh", language_preference="Gujarati"
+    )
+    service.save_user_profile(
+        user_id="user_b", name="Amit", language_preference="Hindi"
+    )
 
     user_a = service.get_user("user_a")
     user_b = service.get_user("user_b")
@@ -168,7 +176,9 @@ def test_forget_me_protocol(persistent_test_db):
     service = MemoryService(db)
 
     user_id = "user_to_forget"
-    service.save_user_profile(user_id=user_id, name="Suresh", language_preference="Hindi")
+    service.save_user_profile(
+        user_id=user_id, name="Suresh", language_preference="Hindi"
+    )
     assert service.get_user(user_id) is not None
 
     deleted = service.delete_user(user_id)
@@ -213,7 +223,9 @@ async def test_memory_tools_module(persistent_test_db):
     assert "Hindi" in lookup_res
 
     # 15. Forget tool
-    forget_res = await forget_caller_tool(agent=agent, context=None, user_id=test_uid, user_confirmation=True)
+    forget_res = await forget_caller_tool(
+        agent=agent, context=None, user_id=test_uid, user_confirmation=True
+    )
     assert "removed" in forget_res.lower()
 
 
@@ -295,4 +307,3 @@ async def test_gautam_gujarati_call_flow_across_restart(persistent_test_db):
     # Verify agent instructions now strictly contain Gautam and Gujarati instruction
     assert "Gautam" in agent_call_2.instructions
     assert "Gujarati" in agent_call_2.instructions
-

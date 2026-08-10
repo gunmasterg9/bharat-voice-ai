@@ -68,9 +68,7 @@ class Database:
             conn.execute(schema_sql)
         logger.info("Memory database initialized: %s", self.db_path)
 
-    def execute_read(
-        self, query: str, params: Iterable[Any] = ()
-    ) -> list[sqlite3.Row]:
+    def execute_read(self, query: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
         """Execute a read query with parameterized inputs."""
         with self.get_connection() as conn:
             cursor = conn.cursor()

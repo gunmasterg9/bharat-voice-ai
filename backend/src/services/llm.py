@@ -41,10 +41,16 @@ def create_llm(config: GeminiConfig):
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     groq_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant").strip()
     provider = os.environ.get("LLM_PROVIDER", "auto").strip().lower()
-    nvidia_key = os.environ.get("NVIDIA_API_KEY", "").strip() or os.environ.get("NVIDIA_NIM_API_KEY", "").strip()
+    nvidia_key = (
+        os.environ.get("NVIDIA_API_KEY", "").strip()
+        or os.environ.get("NVIDIA_NIM_API_KEY", "").strip()
+    )
     nvidia_model = os.environ.get("NVIDIA_MODEL", "meta/llama-3.1-8b-instruct").strip()
     nvidia_timeout_seconds = float(os.environ.get("NVIDIA_TIMEOUT_SECONDS", "45"))
-    google_key = os.environ.get("GOOGLE_API_KEY", "").strip() or os.environ.get("GEMINI_API_KEY", "").strip()
+    google_key = (
+        os.environ.get("GOOGLE_API_KEY", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
     if provider == "gemini":
@@ -58,7 +64,10 @@ def create_llm(config: GeminiConfig):
         if not openai_key or openai is None:
             raise RuntimeError("LLM_PROVIDER=openai requires OPENAI_API_KEY.")
         model_name = config.model if config.model.startswith("gpt") else "gpt-4o-mini"
-        logger.info("Creating OpenAI LLM service by explicit provider selection: model=%s", model_name)
+        logger.info(
+            "Creating OpenAI LLM service by explicit provider selection: model=%s",
+            model_name,
+        )
         return openai.LLM(model=model_name, api_key=openai_key)
 
     if provider in {"nvidia", "nvidia-nim"}:

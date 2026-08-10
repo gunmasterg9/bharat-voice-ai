@@ -27,8 +27,9 @@ def inspect_database() -> None:
 
     db = Database(db_path)
 
-
-    rows = db.execute_read("SELECT user_id, name, language_preference, facts, last_interaction FROM users;")
+    rows = db.execute_read(
+        "SELECT user_id, name, language_preference, facts, last_interaction FROM users;"
+    )
 
     print(f"\nUsers: {len(rows)}\n")
 

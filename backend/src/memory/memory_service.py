@@ -113,7 +113,12 @@ class MemoryService:
                 "FROM users WHERE user_id = ? OR name = ? ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, last_interaction DESC;",
                 (user_id, user_id, user_id),
             )
-            if not rows and str(user_id).lower() in ["default_user", "caller_default_user", "caller", "user"]:
+            if not rows and str(user_id).lower() in [
+                "default_user",
+                "caller_default_user",
+                "caller",
+                "user",
+            ]:
                 rows = self.db.execute_read(
                     "SELECT user_id, name, language_preference, facts, last_interaction, created_at, updated_at "
                     "FROM users ORDER BY last_interaction DESC LIMIT 1;"
@@ -224,9 +229,7 @@ class MemoryService:
         )
         return self.get_user(user_id) or {}
 
-    def update_language_preference(
-        self, user_id: str, language: str
-    ) -> dict[str, Any]:
+    def update_language_preference(self, user_id: str, language: str) -> dict[str, Any]:
         """Update user's preferred language."""
         user = self.get_user(user_id)
         if not user:
@@ -256,7 +259,9 @@ class MemoryService:
         """Check if a user_id profile exists in SQLite."""
         if not user_id:
             return False
-        rows = self.db.execute_read("SELECT 1 FROM users WHERE user_id = ?;", (user_id,))
+        rows = self.db.execute_read(
+            "SELECT 1 FROM users WHERE user_id = ?;", (user_id,)
+        )
         return len(rows) > 0
 
     def create_user(
@@ -333,7 +338,9 @@ class MemoryService:
             rowcount = self.db.execute_write(
                 "DELETE FROM users WHERE user_id = ?;", (user_id,)
             )
-            logger.info("[MEMORY] Profile deleted for user_id: %s (rows: %d)", user_id, rowcount)
+            logger.info(
+                "[MEMORY] Profile deleted for user_id: %s (rows: %d)", user_id, rowcount
+            )
             return rowcount > 0
         except Exception as exc:
             logger.error("Error deleting user %s: %s", user_id, str(exc))
@@ -355,7 +362,10 @@ def get_memory_service(db: Database | None = None) -> MemoryService:
     global _memory_service_instance
     if db is not None:
         _memory_service_instance = MemoryService(db)
-    elif _memory_service_instance is None or not _memory_service_instance.db.db_path.parent.exists():
+    elif (
+        _memory_service_instance is None
+        or not _memory_service_instance.db.db_path.parent.exists()
+    ):
         _memory_service_instance = MemoryService(get_db())
     return _memory_service_instance
 

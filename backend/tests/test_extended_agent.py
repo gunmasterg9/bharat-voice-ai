@@ -75,10 +75,14 @@ def test_analytics_collector(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_function_tools() -> None:
     """Test BharatVoiceAgent tool executions."""
+    import json
+
     agent = BharatVoiceAgent(session_id="test_tool_session")
 
     weather_res = await agent.get_weather(context=None, location="Ahmedabad")
     assert "Ahmedabad" in weather_res
+    w_data = json.loads(weather_res)
+    assert w_data["success"] is True
 
     news_res = await agent.get_latest_news(context=None, category="technology")
     assert "AI" in news_res or "News" in news_res
