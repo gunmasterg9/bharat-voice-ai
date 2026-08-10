@@ -2,8 +2,8 @@
 
 [![Voice for Bharat Challenge 2026](https://img.shields.io/badge/Voice%20for%20Bharat-Challenge%202026-orange.svg)](https://github.com/murf-ai/voice-for-bharat-challenge-2026)
 [![TTS](https://img.shields.io/badge/TTS-Murf%20Falcon%20(~100ms)-blue.svg)](https://murf.ai/falcon)
-[![Framework](https://img.shields.io/badge/Framework-LiveKit%20Agents%201.4-green.svg)](https://docs.livekit.io/agents)
-[![Tests](https://img.shields.io/badge/Tests-33%20Passed-brightgreen.svg)]()
+[![Framework](https://img.shields.io/badge/Framework-LiveKit%20Agents%201.4-green.svg)](https://docs.livekit.io/)
+[![Tests](https://img.shields.io/badge/Tests-41%20Passed-brightgreen.svg)]()
 
 **Bharat Voice AI** is a production-ready, multilingual voice assistant built for India as part of the official **10 Days of Voice Agents — #VoiceForBharat Edition** challenge hosted by [Murf AI](https://murf.ai/).
 
@@ -20,11 +20,12 @@
 - **Agent Orchestrator:** LiveKit Agents SDK (`livekit-agents ~1.4`), Python `AgentServer` & `AgentSession`.
 - **Turn & Voice Activity Detection:** Silero VAD & LiveKit Turn Detector (`MultilingualModel`).
 - **Database / Memory:** Embedded SQLite (`backend/data/bharat_voice.db`) with WAL mode, parameterized queries, and explicit consent management.
+- **External Tools:** Open-Meteo REST API (Geocoding & Forecast API for live weather lookups).
 - **Frontend UI:** Next.js (React, TypeScript, Tailwind CSS, LiveKit Agents UI).
 
 ---
 
-## 📋 Day-by-Day Implementation Summary (Day 1 → Day 4)
+## 📋 Day-by-Day Implementation Summary (Day 1 → Day 5)
 
 ### 🎙️ Day 1: Get Your Voice Agent Talking
 - **Starter Foundation:** Configured `murf-livekit-starter` with Python 3.10+, `uv` package manager, and Next.js.
@@ -107,9 +108,11 @@
 
 ```
 murf-livekit-starter/
-├── DAY4_IMPLEMENTATION.md    # Technical Architecture & Inspection Document
+├── DAY5_IMPLEMENTATION.md    # Day 5 Technical Architecture Document
+├── DAY4_IMPLEMENTATION.md    # Day 4 Technical Architecture Document
 ├── MEMORY_RED_TEAM.md        # Privacy & Security Red Team Suite
 ├── docs/
+│   ├── DAY5.md              # Day 5 Weather Tool Architecture & Schemas
 │   ├── DAY4.md              # Day 4 Memory Specification
 │   └── DAY3.md              # Day 3 Frontend Specification
 ├── README.md                 # Master README (This File)
@@ -120,8 +123,8 @@ murf-livekit-starter/
 │   │   ├── agent.py          # Entrypoint & Participant ID Resolver
 │   │   ├── agent/            # Prompts, Voice Agent, Guardrails, Memory Tools
 │   │   ├── memory/           # Database Manager & Memory Service
-│   │   └── services/         # Gemini LLM, Deepgram STT, Murf Falcon TTS
-│   └── tests/                # Pytest Suite (33/33 Tests Passed)
+│   │   └── services/         # Gemini LLM, Deepgram STT, Murf Falcon TTS, Weather Service
+│   └── tests/                # Pytest Suite (41/41 Tests Passed)
 └── frontend/                 # Next.js Voice UI
     ├── app/api/token/route.ts# Token Route with Persistent UserId
     └── components/           # Voice Agent UI & State Management
@@ -129,37 +132,11 @@ murf-livekit-starter/
 
 ---
 
-## 🧪 Testing & Verification
+## 🚀 Getting Started
 
-Run the full backend test suite (33 automated unit, memory, guardrail, and LLM-judged evaluation tests):
+### 1. Environment Setup
 
-```bash
-cd backend
-uv sync
-uv run pytest
-```
-
-Output:
-```text
-============================= 33 passed in 18.29s =============================
-```
-
-### Inspecting Disk Memory
-
-Inspect stored SQLite caller records on disk using the built-in tool:
-
-```bash
-cd backend
-uv run python -m memory.inspect_db
-```
-
----
-
-## ⚡ Quick Start Instructions
-
-### 1. Environment Variables
-
-Copy `backend/.env.example` to `backend/.env.local` and set:
+Copy `backend/.env.example` to `backend/.env.local` and configure required API keys:
 ```env
 LIVEKIT_URL=wss://your-livekit-url
 LIVEKIT_API_KEY=your_key
@@ -196,23 +173,28 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
-## 🗣️ Example Day 4 Demo Session
+## 🗣️ Example Day 5 Live Tool Demo Session
 
-### Call 1 (New Caller & Consent Granted):
-- **Farmer**: *"Namaste, my name is Ramesh and I grow cotton in Ahmedabad."*
-- **Agent**: *"Namaste Ramesh! I can remember your location and cotton crop details to give you better advice next time. May I save this information?"*
-- **Farmer**: *"Yes, please save it."* -> *(Agent calls `save_caller_memory(user_consent=True)`)*
-- **Agent**: *"Thank you! I have saved your details."*
+### Scenario 1: Real-Time Weather Lookup (Veraval):
+- **Farmer**: *"What's the weather in Veraval today?"*
+- **Agent Logs**:
+  - `[TOOL] get_weather called`
+  - `[TOOL] location = Veraval`
+  - `[TOOL] weather request started for location 'Veraval'`
+  - `[TOOL] weather request successful for 'Veraval'`
+- **Spoken Response**: *"According to the latest weather data, the current temperature in Veraval is around 28 degrees Celsius with overcast skies and high probability of rain today."*
 
-### Call 2 (Returning Caller - Restart Agent & Reconnect):
-- *(Restart backend process completely)*
-- **Agent**: *"Namaste Ramesh! Welcome back. Last time we spoke about your cotton crop in Ahmedabad. How can I help you today?"*
+### Scenario 2: Gujarati Multilingual Weather Query:
+- **Farmer**: *"વેરાવળમાં આજે હવામાન કેવું છે?"*
+- **Spoken Response**: *"તાજેતરના હવામાન ડેટા મુજબ, આજે વેરાવળમાં વરસાદની 97 ટકા શક્યતા સાથે તાપમાન લગભગ 28 ડિગ્રી સેલ્સિયસ છે."*
 
-### Call 3 (Privacy Opt-Out):
-- **Farmer**: *"My name is Suresh."*
-- **Agent**: *"May I save your name for future calls?"*
-- **Farmer**: *"No, don't save anything."*
-- **Agent**: *"Of course. I won't save that information."* -> *(No data written to database)*
+### Scenario 3: Memory Location Fallback:
+- **Farmer**: *"What's the weather today?"*
+- **Agent**: *(Detects stored user profile with location `Veraval`)* -> *"For your saved location Veraval, today's temperature is around 28 degrees Celsius with overcast skies."*
+
+### Scenario 4: Weather API Failure Handling (Simulated Timeout):
+- **Farmer**: *"What's the weather in Ahmedabad?"* -> *(Simulated API failure/timeout)*
+- **Spoken Response**: *"Sorry, I couldn't retrieve the latest weather information right now. Please try again in a moment."*
 
 ---
 
