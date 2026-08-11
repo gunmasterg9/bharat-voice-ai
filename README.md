@@ -3,7 +3,7 @@
 [![Voice for Bharat Challenge 2026](https://img.shields.io/badge/Voice%20for%20Bharat-Challenge%202026-orange.svg)](https://github.com/murf-ai/voice-for-bharat-challenge-2026)
 [![TTS](https://img.shields.io/badge/TTS-Murf%20Falcon%20(~100ms)-blue.svg)](https://murf.ai/falcon)
 [![Framework](https://img.shields.io/badge/Framework-LiveKit%20Agents%201.4-green.svg)](https://docs.livekit.io/)
-[![Tests](https://img.shields.io/badge/Tests-46%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-56%20Passed-brightgreen.svg)]()
 
 **Bharat Voice AI** is a production-ready, multilingual voice assistant built for India as part of the official **10 Days of Voice Agents — #VoiceForBharat Edition** challenge hosted by [Murf AI](https://murf.ai/).
 
@@ -25,7 +25,7 @@
 
 ---
 
-## 📋 Day-by-Day Implementation Summary (Day 1 → Day 5)
+## 📋 Day-by-Day Implementation Summary (Day 1 → Day 6)
 
 ### 🎙️ Day 1: Get Your Voice Agent Talking
 - **Starter Foundation:** Configured `murf-livekit-starter` with Python 3.10+, `uv` package manager, and Next.js.
@@ -132,7 +132,7 @@ murf-livekit-starter/
 │   │   ├── agent/            # Prompts, Voice Agent, Guardrails, Memory Tools
 │   │   ├── memory/           # Database Manager & Memory Service
 │   │   └── services/         # Gemini LLM, Deepgram STT, Murf Falcon TTS, Weather Service
-│   └── tests/                # Pytest Suite (41/41 Tests Passed)
+│   └── tests/                # Pytest Suite (56/56 Tests Passed)
 └── frontend/                 # Next.js Voice UI
     ├── app/api/token/route.ts# Token Route with Persistent UserId
     └── components/           # Voice Agent UI & State Management
