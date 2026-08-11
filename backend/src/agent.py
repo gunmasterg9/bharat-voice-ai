@@ -14,6 +14,13 @@ Run with:
     uv run python src/agent.py console   # Terminal testing
 """
 
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import asyncio
 import json
 
@@ -101,14 +108,32 @@ async def bharat_voice_session(ctx: JobContext) -> None:
         await ctx.connect()
         logger.info("Connected to room: %s", ctx.room.name)
 
+        # Check if session is an outbound call via job metadata or room name
+        is_outbound = False
+        outbound_metadata = {}
+        if ctx.job and getattr(ctx.job, "metadata", None):
+            try:
+                outbound_metadata = json.loads(ctx.job.metadata)
+                if outbound_metadata.get("call_type") in [
+                    "outbound_weather_alert",
+                    "weather_alert",
+                ]:
+                    is_outbound = True
+            except Exception:
+                pass
+        if not is_outbound and ctx.room.name.startswith("bharat-outbound-"):
+            is_outbound = True
+
         # Extract persistent participant identity (wait for participant to connect)
         participant_identity = None
         try:
+            timeout_sec = 30.0 if is_outbound else 10.0
             participant = await asyncio.wait_for(
-                ctx.wait_for_participant(), timeout=5.0
+                ctx.wait_for_participant(), timeout=timeout_sec
             )
             if participant and participant.identity:
                 participant_identity = participant.identity
+
         except Exception:
             logger.warning(
                 "Timed out waiting for remote participant, checking room remote_participants..."
@@ -118,58 +143,98 @@ async def bharat_voice_session(ctx: JobContext) -> None:
                 if p and p.identity:
                     participant_identity = p.identity
 
-        # Crucial fix: NEVER fallback user_id to dynamic room.name (e.g. voice_assistant_room_XXXX)
-        if not participant_identity or participant_identity.startswith(
+        # Determine user_id
+        meta_user_id = outbound_metadata.get("user_id")
+        if meta_user_id:
+            user_id = meta_user_id
+        elif not participant_identity or participant_identity.startswith(
             "voice_assistant_room_"
         ):
             user_id = "default_user"
         else:
             user_id = participant_identity
 
+        logger.info("[SESSION] IS OUTBOUND CALL = %s", is_outbound)
         logger.info("[MEMORY DEBUG] LIVEKIT IDENTITY = %s", participant_identity)
         logger.info("[MEMORY DEBUG] AGENT USER ID = %s", user_id)
 
-        # Check SQLite database for returning caller profile
+        # Check SQLite database for caller profile
         db_memory = get_memory_service()
-        logger.info("[MEMORY DEBUG] DATABASE = %s", db_memory.db.db_path)
-        logger.info("[MEMORY DEBUG] LOOKUP USER ID = %s", user_id)
+        caller_profile = db_memory.get_user(user_id) or {}
+        name = caller_profile.get("name") or outbound_metadata.get(
+            "user_name", "Gautam"
+        )
+        lang = (
+            caller_profile.get("language_preference")
+            or outbound_metadata.get("language")
+            or "Gujarati"
+        )
 
-        caller_profile = db_memory.get_user(user_id)
-        agent_instructions = SYSTEM_PROMPT
-
-        if caller_profile and caller_profile.get("name"):
-            name = caller_profile["name"]
-            lang = caller_profile.get("language_preference", "")
-            facts = caller_profile.get("facts", {})
-            logger.info(
-                "[MEMORY DEBUG] LOOKUP RESULT = FOUND profile for user_id '%s': %s",
-                user_id,
-                json.dumps(caller_profile, ensure_ascii=False),
+        if is_outbound:
+            # Construct Outbound Prompt & Mandatory 3-Part Spoken Opening
+            location = caller_profile.get("facts", {}).get("location", "Veraval")
+            outbound_prompt_addon = (
+                f"\n\n[OUTBOUND CALL MODE ENABLED]\n"
+                f"You are placing an outbound call to {name} regarding a weather/rain alert for saved location '{location}'.\n"
+                f"MANDATORY OPENING RULES:\n"
+                f"Your FIRST spoken sentence MUST clearly state:\n"
+                f"1. WHO is calling (Bharat Voice AI)\n"
+                f"2. WHY you are calling (weather alert for {location})\n"
+                f"3. HOW to stop future calls (tell you to stop/opt-out)\n\n"
+                f"OPT-OUT HANDLING RULE:\n"
+                f"If the user says 'Stop calling me', 'Don't call me again', 'મને ફરી ફોન ન કરશો', or 'मुझे दोबारा फोन मत करना', "
+                f"you MUST call `update_outbound_consent(consent=False, opt_out=True)`, confirm politely, and then call `end_call()`."
             )
+            agent_instructions = SYSTEM_PROMPT + outbound_prompt_addon
 
-            profile_prompt_addon = (
-                f"\n\n[RECOGNIZED RETURNING CALLER PROFILE]\n"
-                f"Caller Name: {name}\n"
-                f"Preferred Language: {lang or 'Not specified'}\n"
-                f"Remembered Facts: {json.dumps(facts, ensure_ascii=False)}\n"
-                f"INSTRUCTION: Address the user as {name}, speak in {lang or 'their preferred language'} using native script "
-                f"(Gujarati script for Gujarati, Devanagari script for Hindi). ALWAYS respond in {lang or 'their preferred language'} "
-                f"addressing {name} by name, even if the user greets you with a simple English word like 'Hello'!"
-            )
-            agent_instructions = SYSTEM_PROMPT + profile_prompt_addon
-
-            if lang and lang.lower() in ["hindi", "hinglish"]:
-                greeting = f"नमस्ते {name}! आपका स्वागत है। आज मैं आपकी क्या सहायता कर सकती हूँ?"
-            elif lang and lang.lower() in ["gujarati", "gujlish"]:
-                greeting = f"કેમ છો {name}! તમારું સ્વાગત છે. આજે હું તમારી શું મદદ કરી શકું?"
+            if lang.lower() in ["gujarati", "gujlish"]:
+                greeting = (
+                    f"નમસ્તે {name}, હું Bharat Voice AI છું. "
+                    f"તમારા સેવ કરેલા વિસ્તાર {location} માટે હવામાનની વરસાદી ચેતવણી આપવા કૉલ કરી રહ્યો છું. "
+                    f"જો તમે આગળથી આ કૉલ્સ ન ઇચ્છતા હોવ તો મને કહેજો, હું તેને બંધ કરી દઈશ."
+                )
+            elif lang.lower() in ["hindi", "hinglish"]:
+                greeting = (
+                    f"नमस्ते {name}, मैं Bharat Voice AI हूँ। "
+                    f"आपके सेव किए गए इलाके {location} के लिए मौसम की बारिश की चेतावनी देने के लिए कॉल कर रहा हूँ। "
+                    f"अगर आप आगे ऐसे कॉल नहीं चाहते, तो मुझे बता दीजिए, मैं इसे बंद कर दूंगा।"
+                )
             else:
-                greeting = f"Namaste {name}! Welcome back. How can I help you today?"
-            logger.info("Spoken returning caller greeting for '%s' (%s)", name, lang)
-        else:
+                greeting = (
+                    f"Hello {name}, this is Bharat Voice AI calling with a weather alert for your saved location {location}. "
+                    f"If you don't want these alert calls in the future, just tell me and I'll stop them."
+                )
             logger.info(
-                "[MEMORY DEBUG] LOOKUP RESULT = NOT FOUND for user_id '%s'", user_id
+                "Outbound spoken mandatory opening prepared for '%s' (%s)", name, lang
             )
-            greeting = WELCOME_MESSAGE
+        else:
+            # Inbound call setup
+            if caller_profile and caller_profile.get("name"):
+                facts = caller_profile.get("facts", {})
+                profile_prompt_addon = (
+                    f"\n\n[RECOGNIZED RETURNING CALLER PROFILE]\n"
+                    f"Caller Name: {name}\n"
+                    f"Preferred Language: {lang or 'Not specified'}\n"
+                    f"Remembered Facts: {json.dumps(facts, ensure_ascii=False)}\n"
+                    f"INSTRUCTION: Address the user as {name}, speak in {lang or 'their preferred language'} using native script "
+                    f"(Gujarati script for Gujarati, Devanagari script for Hindi). ALWAYS respond in {lang or 'their preferred language'} "
+                    f"addressing {name} by name, even if the user greets you with a simple English word like 'Hello'!"
+                )
+                agent_instructions = SYSTEM_PROMPT + profile_prompt_addon
+
+                if lang and lang.lower() in ["hindi", "hinglish"]:
+                    greeting = (
+                        f"नमस्ते {name}! आपका स्वागत है। आज मैं आपकी क्या सहायता कर सकती हूँ?"
+                    )
+                elif lang and lang.lower() in ["gujarati", "gujlish"]:
+                    greeting = f"કેમ છો {name}! તમારું સ્વાગત છે. આજે હું તમારી શું મદદ કરી શકું?"
+                else:
+                    greeting = (
+                        f"Namaste {name}! Welcome back. How can I help you today?"
+                    )
+            else:
+                agent_instructions = SYSTEM_PROMPT
+                greeting = WELCOME_MESSAGE
 
         stt_service = create_stt(settings.deepgram)
         llm_service = create_llm(settings.gemini)
@@ -189,6 +254,8 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             user_id=user_id,
             instructions=agent_instructions,
         )
+        voice_agent._active_session = session
+        voice_agent.room = ctx.room
 
         await session.start(
             agent=voice_agent,
@@ -205,6 +272,8 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             ),
         )
 
+        # Brief 1.5s pause to ensure SIP RTP media stream is fully established after answer
+        await asyncio.sleep(1.5)
         await session.say(greeting)
 
     except Exception as exc:

@@ -504,3 +504,39 @@ class BharatVoiceAgent(Agent):
         )
 
         return f"Translated phrase ({lang}): {translation}"
+
+    @function_tool
+    async def update_outbound_consent(
+        self,
+        context: RunContext,
+        consent: bool,
+        opt_out: bool = False,
+    ) -> str:
+        """
+        Update caller's outbound call consent and opt-out preferences.
+
+        Args:
+            consent: True if caller agrees to receive proactive weather alert calls, False otherwise.
+            opt_out: Set to True if user explicitly requests to stop future calls ("Stop calling me", "Don't call me again", "મને ફરી ફોન ન કરશો", "मुझे दोबारा फोन मत करना").
+        """
+        from memory.tools import update_outbound_consent_tool
+
+        return await update_outbound_consent_tool(
+            agent=self, context=context, consent=consent, opt_out=opt_out
+        )
+
+    @function_tool
+    async def end_call(
+        self,
+        context: RunContext,
+        reason: str = "task_complete",
+    ) -> str:
+        """
+        Gracefully end the phone call when conversation finishes or after user opts out.
+
+        Args:
+            reason: Reason for call termination ('user_opt_out', 'task_complete', 'voicemail_delivered').
+        """
+        from memory.tools import end_call_tool
+
+        return await end_call_tool(agent=self, context=context, reason=reason)

@@ -44,6 +44,24 @@ export const WelcomeView = ({
         >
           {startButtonText}
         </Button>
+
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+              Dev Admin Controls (Day 6)
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                alert('Outbound Weather Alert Call Triggered! Check backend logs or test phone.');
+              }}
+              className="w-64 rounded-full font-mono text-xs text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+            >
+              📞 Test Outbound Call
+            </Button>
+          </div>
+        )}
       </section>
 
       <div className="fixed bottom-5 left-0 flex w-full items-center justify-center">

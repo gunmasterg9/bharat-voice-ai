@@ -105,6 +105,26 @@ class MurfConfig:
 
 
 @dataclass(frozen=True)
+class TelephonyConfig:
+    """SIP Telephony & Outbound call configuration."""
+
+    sip_trunk_id: str = ""
+    sip_trunk_hostname: str = ""
+    sip_auth_username: str = ""
+    sip_auth_password: str = ""
+    linphone_username: str = "gautammax"
+    linphone_domain: str = "sip.linphone.org"
+    linphone_sip_uri: str = "sip:gautammax@sip.linphone.org"
+    outbound_phone_number: str = ""
+    outbound_test_phone_number: str = ""
+    outbound_test_mode: bool = True
+    weather_alert_rain_threshold: int = 70
+    outbound_call_start_hour: int = 8
+    outbound_call_end_hour: int = 20
+    outbound_max_retries: int = 0
+
+
+@dataclass(frozen=True)
 class Settings:
     """
     Top-level application settings.
@@ -118,6 +138,7 @@ class Settings:
     deepgram: DeepgramConfig = field(default_factory=lambda: DeepgramConfig(""))
     gemini: GeminiConfig = field(default_factory=lambda: GeminiConfig(""))
     murf: MurfConfig = field(default_factory=lambda: MurfConfig(""))
+    telephony: TelephonyConfig = field(default_factory=lambda: TelephonyConfig())
 
 
 def _get_required_env(key: str) -> str:
@@ -136,6 +157,23 @@ def _get_required_env(key: str) -> str:
 def _get_optional_env(key: str, default: str = "") -> str:
     """Retrieve an optional environment variable with a default."""
     return os.environ.get(key, default).strip()
+
+
+def log_env_config(settings: Settings) -> None:
+    """Safely log startup configuration status without printing secrets."""
+    print(f"[CONFIG] LIVEKIT_URL configured: {'YES' if settings.livekit.url else 'NO'}")
+    print(
+        f"[CONFIG] LIVEKIT_API_KEY configured: {'YES' if settings.livekit.api_key else 'NO'}"
+    )
+    print(
+        f"[CONFIG] LIVEKIT_API_SECRET configured: {'YES' if settings.livekit.api_secret else 'NO'}"
+    )
+    print(
+        f"[CONFIG] SIP OUTBOUND TRUNK configured: {'YES' if settings.telephony.sip_trunk_id else 'NO'}"
+    )
+    print(
+        f"[CONFIG] LINPHONE USERNAME: {settings.telephony.linphone_username or 'gautammax'}"
+    )
 
 
 def load_settings(env_file: str = ".env.local") -> Settings:
@@ -195,6 +233,13 @@ def load_settings(env_file: str = ".env.local") -> Settings:
         final_locale = _get_optional_env("MURF_LOCALE", DEFAULT_TTS_LOCALE)
         final_style = _get_optional_env("MURF_STYLE", DEFAULT_TTS_STYLE)
 
+    test_mode_raw = _get_optional_env("OUTBOUND_TEST_MODE", "true").lower()
+    test_mode = test_mode_raw in ["true", "1", "yes"]
+
+    trunk_id = _get_optional_env(
+        "LIVEKIT_SIP_OUTBOUND_TRUNK_ID", _get_optional_env("SIP_TRUNK_ID", "")
+    )
+
     settings = Settings(
         agent_name=_get_optional_env("AGENT_NAME", DEFAULT_AGENT_NAME),
         livekit=LiveKitConfig(
@@ -216,7 +261,42 @@ def load_settings(env_file: str = ".env.local") -> Settings:
             locale=final_locale,
             style=final_style,
         ),
+        telephony=TelephonyConfig(
+            sip_trunk_id=trunk_id,
+            sip_trunk_hostname=_get_optional_env(
+                "SIP_TRUNK_HOSTNAME", "sip.linphone.org"
+            ),
+            sip_auth_username=_get_optional_env("SIP_AUTH_USERNAME", "gautammax"),
+            sip_auth_password=_get_optional_env("SIP_AUTH_PASSWORD", ""),
+            linphone_username=_get_optional_env("LINPHONE_USERNAME", "gautammax"),
+            linphone_domain=_get_optional_env("LINPHONE_DOMAIN", "sip.linphone.org"),
+            linphone_sip_uri=_get_optional_env(
+                "LINPHONE_SIP_URI", "sip:gautammax@sip.linphone.org"
+            ),
+            outbound_phone_number=_get_optional_env(
+                "LINPHONE_SIP_URI",
+                _get_optional_env(
+                    "OUTBOUND_PHONE_NUMBER", "sip:gautammax@sip.linphone.org"
+                ),
+            ),
+            outbound_test_phone_number=_get_optional_env(
+                "OUTBOUND_TEST_PHONE_NUMBER",
+                _get_optional_env("LINPHONE_SIP_URI", "sip:gautammax@sip.linphone.org"),
+            ),
+            outbound_test_mode=test_mode,
+            weather_alert_rain_threshold=int(
+                _get_optional_env("WEATHER_ALERT_RAIN_THRESHOLD", "70")
+            ),
+            outbound_call_start_hour=int(
+                _get_optional_env("OUTBOUND_CALL_START_HOUR", "8")
+            ),
+            outbound_call_end_hour=int(
+                _get_optional_env("OUTBOUND_CALL_END_HOUR", "20")
+            ),
+            outbound_max_retries=int(_get_optional_env("OUTBOUND_MAX_RETRIES", "0")),
+        ),
     )
 
     logger.info("Configuration loaded successfully.")
+    log_env_config(settings)
     return settings

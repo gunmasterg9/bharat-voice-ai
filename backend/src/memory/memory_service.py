@@ -18,6 +18,20 @@ from memory.database import Database, get_db
 
 logger = get_logger(COMPONENT_AGENT)
 
+
+def mask_phone_number(phone: str | None) -> str:
+    """Mask phone number for safe log printing (e.g. +919876543210 -> +91******3210)."""
+    if not phone:
+        return "<none>"
+    phone_clean = str(phone).strip()
+    if len(phone_clean) <= 6:
+        return "***"
+    prefix = phone_clean[:3]
+    suffix = phone_clean[-4:]
+    masked_len = len(phone_clean) - 7
+    return f"{prefix}{'*' * max(3, masked_len)}{suffix}"
+
+
 # Sensitive patterns that MUST NOT be stored in memory
 SENSITIVE_KEYWORDS = {
     "password",
@@ -109,7 +123,9 @@ class MemoryService:
         try:
             logger.info("[MEMORY] User ID: %s", user_id)
             rows = self.db.execute_read(
-                "SELECT user_id, name, language_preference, facts, last_interaction, created_at, updated_at "
+                "SELECT user_id, name, language_preference, facts, last_interaction, created_at, updated_at, "
+                "phone_number, phone_verified, outbound_call_consent, outbound_call_enabled, preferred_call_language, "
+                "last_outbound_call, last_outbound_reason, opted_out "
                 "FROM users WHERE user_id = ? OR name = ? ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, last_interaction DESC;",
                 (user_id, user_id, user_id),
             )
@@ -120,7 +136,9 @@ class MemoryService:
                 "user",
             ]:
                 rows = self.db.execute_read(
-                    "SELECT user_id, name, language_preference, facts, last_interaction, created_at, updated_at "
+                    "SELECT user_id, name, language_preference, facts, last_interaction, created_at, updated_at, "
+                    "phone_number, phone_verified, outbound_call_consent, outbound_call_enabled, preferred_call_language, "
+                    "last_outbound_call, last_outbound_reason, opted_out "
                     "FROM users ORDER BY last_interaction DESC LIMIT 1;"
                 )
 
@@ -136,6 +154,13 @@ class MemoryService:
             except Exception:
                 facts_dict = {}
 
+            # Helper function to access dict key or Row column safely
+            def get_col(r, key, default=None):
+                try:
+                    return r[key] if r[key] is not None else default
+                except (IndexError, KeyError):
+                    return default
+
             return {
                 "user_id": row["user_id"],
                 "name": row["name"],
@@ -144,6 +169,14 @@ class MemoryService:
                 "last_interaction": row["last_interaction"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
+                "phone_number": get_col(row, "phone_number"),
+                "phone_verified": bool(get_col(row, "phone_verified", 0)),
+                "outbound_call_consent": bool(get_col(row, "outbound_call_consent", 0)),
+                "outbound_call_enabled": bool(get_col(row, "outbound_call_enabled", 1)),
+                "preferred_call_language": get_col(row, "preferred_call_language"),
+                "last_outbound_call": get_col(row, "last_outbound_call"),
+                "last_outbound_reason": get_col(row, "last_outbound_reason"),
+                "opted_out": bool(get_col(row, "opted_out", 0)),
             }
         except Exception as exc:
             logger.error("Error retrieving user profile for %s: %s", user_id, str(exc))
@@ -345,6 +378,103 @@ class MemoryService:
         except Exception as exc:
             logger.error("Error deleting user %s: %s", user_id, str(exc))
             return False
+
+    def update_outbound_consent(
+        self, user_id: str, consent: bool, opted_out: bool = False
+    ) -> dict[str, Any]:
+        """Update outbound call consent and opted_out flags for a user."""
+        now = datetime.now(timezone.utc).isoformat()
+        user = self.get_user(user_id)
+        if not user:
+            self.save_user(user_id=user_id)
+
+        self.db.execute_write(
+            "UPDATE users SET outbound_call_consent = ?, opted_out = ?, updated_at = ? WHERE user_id = ?;",
+            (1 if consent else 0, 1 if opted_out else 0, now, user_id),
+        )
+        logger.info(
+            "[MEMORY] Outbound consent updated for user_id '%s': consent=%s, opted_out=%s",
+            user_id,
+            consent,
+            opted_out,
+        )
+        return self.get_user(user_id) or {}
+
+    def update_user_phone(
+        self, user_id: str, phone_number: str, verified: bool = False
+    ) -> dict[str, Any]:
+        """Update phone number for a user profile."""
+        now = datetime.now(timezone.utc).isoformat()
+        user = self.get_user(user_id)
+        if not user:
+            self.save_user(user_id=user_id)
+
+        self.db.execute_write(
+            "UPDATE users SET phone_number = ?, phone_verified = ?, updated_at = ? WHERE user_id = ?;",
+            (phone_number, 1 if verified else 0, now, user_id),
+        )
+        logger.info(
+            "[MEMORY] Phone number updated for user_id '%s': %s",
+            user_id,
+            mask_phone_number(phone_number),
+        )
+        return self.get_user(user_id) or {}
+
+    def record_outbound_call(
+        self,
+        call_id: str,
+        user_id: str,
+        phone_number: str,
+        reason: str,
+        status: str,
+        started_at: str | None = None,
+        answered_at: str | None = None,
+        ended_at: str | None = None,
+        retry_count: int = 0,
+        failure_code: str | None = None,
+        failure_reason: str | None = None,
+    ) -> None:
+        """Record an outbound call event in the outbound_calls table and update user's last_outbound_call."""
+        import hashlib
+
+        phone_hash = (
+            hashlib.sha256(phone_number.encode("utf-8")).hexdigest()[:16]
+            if phone_number
+            else "unknown"
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        start = started_at or now
+
+        self.db.execute_write(
+            "INSERT OR REPLACE INTO outbound_calls "
+            "(call_id, user_id, phone_hash, reason, status, started_at, answered_at, ended_at, retry_count, failure_code, failure_reason) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            (
+                call_id,
+                user_id,
+                phone_hash,
+                reason,
+                status,
+                start,
+                answered_at,
+                ended_at,
+                retry_count,
+                failure_code,
+                failure_reason,
+            ),
+        )
+
+        self.db.execute_write(
+            "UPDATE users SET last_outbound_call = ?, last_outbound_reason = ?, updated_at = ? WHERE user_id = ?;",
+            (now, reason, now, user_id),
+        )
+        logger.info(
+            "[MEMORY] Outbound call logged: call_id=%s, user_id=%s, status=%s, reason=%s",
+            call_id,
+            user_id,
+            status,
+            reason,
+        )
 
 
 # Singleton memory service

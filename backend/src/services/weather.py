@@ -126,10 +126,14 @@ class WeatherService:
                 country = target_place.get("country", "India")
                 timezone = target_place.get("timezone", "Asia/Kolkata")
 
+                safe_name = (
+                    display_name.encode("ascii", "ignore").decode("ascii")
+                    or clean_location
+                )
                 # Step 2: Fetch Forecast Data
                 logger.info(
                     "[WEATHER SERVICE] Fetching forecast for '%s' (lat=%.4f, lon=%.4f)",
-                    display_name,
+                    safe_name,
                     lat,
                     lon,
                 )
@@ -183,8 +187,8 @@ class WeatherService:
                 }
 
                 logger.info(
-                    "[WEATHER SERVICE] Successfully fetched weather for '%s': %d°C, %s",
-                    display_name,
+                    "[WEATHER SERVICE] Successfully fetched weather for '%s': %d C, %s",
+                    safe_name,
                     result_data["temperature_c"],
                     condition_text,
                 )

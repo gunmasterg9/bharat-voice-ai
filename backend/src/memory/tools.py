@@ -181,3 +181,66 @@ async def forget_caller_tool(
         return "Done. I've removed your saved information."
 
     return "No stored profile found to delete or database operation failed."
+
+
+@function_tool
+async def update_outbound_consent_tool(
+    agent: Any,
+    context: RunContext,
+    consent: bool,
+    opt_out: bool = False,
+) -> str:
+    """
+    Update the caller's consent for receiving proactive outbound weather alert calls.
+
+    Args:
+        agent: The active BharatVoiceAgent instance.
+        consent: True if the user agrees to receive outbound calls, False otherwise.
+        opt_out: Set to True if the user explicitly asks to stop receiving calls ("Stop calling me", "Don't call me again", "મને ફરી ફોન ન કરશો").
+    """
+    user_id = agent.user_id
+    db_memory = getattr(agent, "db_memory", None) or get_memory_service()
+
+    if opt_out:
+        consent = False
+
+    db_memory.update_outbound_consent(
+        user_id=user_id, consent=consent, opted_out=opt_out
+    )
+
+    if opt_out or not consent:
+        logger.info("[TOOLS] User '%s' OPTED OUT of outbound alert calls.", user_id)
+        return "Understood. I have updated your preferences and will not place future alert calls to you."
+
+    logger.info("[TOOLS] User '%s' CONSENTED to outbound alert calls.", user_id)
+    return "Thank you! I have enabled weather alert calls for your saved location."
+
+
+@function_tool
+async def end_call_tool(
+    agent: Any,
+    context: RunContext,
+    reason: str = "task_complete",
+) -> str:
+    """
+    Gracefully disconnect the phone call when the conversation is finished, after opt-out, or after voicemail delivery.
+
+    Args:
+        agent: The active BharatVoiceAgent instance.
+        reason: Reason for ending the call (e.g. 'user_opt_out', 'task_complete', 'voicemail_delivered').
+    """
+    logger.info("[TOOLS] Agent initiated call disconnect: reason='%s'", reason)
+    try:
+        if hasattr(agent, "room") and agent.room and hasattr(agent.room, "disconnect"):
+            await agent.room.disconnect()
+            logger.info("[TOOLS] Room disconnected successfully via agent.room.disconnect()")
+        elif hasattr(agent, "_active_session") and agent._active_session and hasattr(agent._active_session, "aclose"):
+            await agent._active_session.aclose()
+            logger.info("[TOOLS] Session closed successfully via agent._active_session.aclose()")
+        elif hasattr(context, "session") and context.session and hasattr(context.session, "aclose"):
+            await context.session.aclose()
+            logger.info("[TOOLS] Session closed successfully via context.session.aclose()")
+    except Exception as exc:
+        logger.warning("[TOOLS] Error during call disconnect: %s", exc)
+
+    return "Call termination sequence initiated."

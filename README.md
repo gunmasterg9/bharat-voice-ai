@@ -3,7 +3,7 @@
 [![Voice for Bharat Challenge 2026](https://img.shields.io/badge/Voice%20for%20Bharat-Challenge%202026-orange.svg)](https://github.com/murf-ai/voice-for-bharat-challenge-2026)
 [![TTS](https://img.shields.io/badge/TTS-Murf%20Falcon%20(~100ms)-blue.svg)](https://murf.ai/falcon)
 [![Framework](https://img.shields.io/badge/Framework-LiveKit%20Agents%201.4-green.svg)](https://docs.livekit.io/)
-[![Tests](https://img.shields.io/badge/Tests-41%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-46%20Passed-brightgreen.svg)]()
 
 **Bharat Voice AI** is a production-ready, multilingual voice assistant built for India as part of the official **10 Days of Voice Agents — #VoiceForBharat Edition** challenge hosted by [Murf AI](https://murf.ai/).
 
@@ -99,8 +99,16 @@
   - Returns structured JSON payloads (`success: true/false`, temperature, feels like, condition, precipitation probability, wind speed).
   - Bounded by a **5.0-second network timeout**.
   - On API failure or DNS error, the agent speaks a graceful fallback message (*"Sorry, I couldn't retrieve the latest weather information right now."*) and **never** hallucinates weather numbers.
-- **Multilingual Spoken Responses:** Converts structured tool results into natural spoken text in Devanagari script for Hindi, Gujarati script for Gujarati, and Latin script for English using probabilistic language for forecasts.
-
+### 📞 Day 6: Make Outbound Calls (Proactive Weather & Rain Alerts)
+- **Outbound Telephony Architecture:** Uses LiveKit Telephony API (`CreateSIPParticipantRequest` & `CreateAgentDispatchRequest`) integrated with Twilio SIP Trunking.
+- **Proactive Rain Alert Use Case:** Checks Open-Meteo forecasts for registered users with saved locations (e.g. Gautam in Veraval). Initiates an outbound call when `precipitation_probability >= WEATHER_ALERT_RAIN_THRESHOLD` (configurable default 70%).
+- **Mandatory 3-Part Spoken Opening:** In the first 2 spoken sentences, the agent explicitly states:
+  1. **WHO**: *"Hello Gautam, this is Bharat Voice AI calling..."*
+  2. **WHY**: *"...with a weather alert for your saved location Veraval."*
+  3. **STOP/OPT-OUT**: *"...If you don't want these alert calls in the future, just tell me and I'll stop them."*
+- **Explicit Consent & Opt-Out Persistence:** Stores `outbound_call_consent` and `opted_out` flags in SQLite database (`data/bharat_voice.db`). If the user says *"Stop calling me"* or *"મને ફરી ફોન ન કરશો"*, the agent invokes `update_outbound_consent(opt_out=True)`, confirms politely, and ends the call cleanly via `end_call()`.
+- **Calling Hours & Duplicate Suppression:** Enforces reasonable calling hours (`OUTBOUND_CALL_START_HOUR=8` to `OUTBOUND_CALL_END_HOUR=20`) and suppresses duplicate alert calls within 24 hours.
+- **Log Privacy & Test Mode:** Masks phone numbers in normal logs (`+91******3210`) and enforces `OUTBOUND_TEST_MODE=true` targeting `OUTBOUND_TEST_PHONE_NUMBER` for safety.
 
 ---
 

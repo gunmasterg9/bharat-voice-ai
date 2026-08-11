@@ -51,7 +51,7 @@ class Database:
             conn.close()
 
     def _init_db(self) -> None:
-        """Initialize database schema if tables do not exist."""
+        """Initialize database schema and perform migrations if needed."""
         schema_sql = """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,10 +63,48 @@ class Database:
             updated_at TEXT NOT NULL,
             last_interaction TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS outbound_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            call_id TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL,
+            phone_hash TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            answered_at TEXT,
+            ended_at TEXT,
+            retry_count INTEGER DEFAULT 0,
+            failure_code TEXT,
+            failure_reason TEXT
+        );
         """
         with self.get_connection() as conn:
-            conn.execute(schema_sql)
-        logger.info("Memory database initialized: %s", self.db_path)
+            conn.executescript(schema_sql)
+
+            # Perform safe column additions on existing 'users' table
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(users);")
+            existing_cols = {row[1] for row in cursor.fetchall()}
+
+            new_columns = [
+                ("phone_number", "TEXT"),
+                ("phone_verified", "INTEGER DEFAULT 0"),
+                ("outbound_call_consent", "INTEGER DEFAULT 0"),
+                ("outbound_call_enabled", "INTEGER DEFAULT 1"),
+                ("preferred_call_language", "TEXT"),
+                ("last_outbound_call", "TEXT"),
+                ("last_outbound_reason", "TEXT"),
+                ("opted_out", "INTEGER DEFAULT 0"),
+            ]
+
+            for col_name, col_type in new_columns:
+                if col_name not in existing_cols:
+                    cursor.execute(
+                        f"ALTER TABLE users ADD COLUMN {col_name} {col_type};"
+                    )
+
+        logger.info("Memory database initialized & schema updated: %s", self.db_path)
 
     def execute_read(self, query: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
         """Execute a read query with parameterized inputs."""
