@@ -21,6 +21,7 @@
 - **Turn & Voice Activity Detection:** Silero VAD & LiveKit Turn Detector (`MultilingualModel`).
 - **Database / Memory:** Embedded SQLite (`backend/data/bharat_voice.db`) with WAL mode, parameterized queries, and explicit consent management.
 - **External Tools:** Open-Meteo REST API (Geocoding & Forecast API for live weather lookups).
+- **Telephony & SIP Outbound:** LiveKit SIP Trunking (`livekit.api`) & Linphone / Mobile app integration.
 - **Frontend UI:** Next.js (React, TypeScript, Tailwind CSS, LiveKit Agents UI).
 
 ---
@@ -38,7 +39,7 @@
   1. Assist farmers with crop health, pest prevention, and fertilizer application steps.
   2. Deliver accurate mandi (market) crop prices with explicit source and date attribution.
   3. Provide localized weather alerts and crop management guidance.
-- **Structured System Prompt:** Implemented prompt sections in [`backend/src/agent/prompts.py`](file:///d:/Desktop/Challenge/10%20Days%20of%20AI%20Voice%20Agents/murf-livekit-starter/backend/src/agent/prompts.py):
+- **Structured System Prompt:** Implemented prompt sections in `backend/src/agent/prompts.py`:
   - `IDENTITY`: Female persona ("Bharat Voice AI"), female grammar agreement rules in Hindi ("कर सकती हूँ").
   - `OBJECTIVES`: 2–3 clear outcomes per call.
   - `KNOWLEDGE`: Agricultural domain scope; refusal of medical diagnosis, legal advice, or financial guarantees.
@@ -52,15 +53,15 @@
   - Turn 2 Silence: *"No problem. Feel free to come back anytime. Goodbye."*
 
 ### 🎨 Day 3: Personalise Your Agent's Frontend
-- **Tailored Agricultural UI:** Built Next.js interface ([`app.tsx`](file:///d:/Desktop/Challenge/10%20Days%20of%20AI%20Voice%20Agents/murf-livekit-starter/frontend/components/app/app.tsx)) styled specifically for farmers.
+- **Tailored Agricultural UI:** Built Next.js interface (`frontend/components/app/welcome-view.tsx`) styled specifically for farmers.
 - **5 Explicit Agent States:**
   1. **`Ready`**: Initial state with one clear "Start Conversation" CTA button.
   2. **`Connecting`**: Joining the LiveKit WebRTC session with visual spinner.
   3. **`Listening`**: VAD active, indicating agent is listening to the user.
   4. **`Speaking`**: Agent is replying via Murf Falcon audio stream.
   5. **`Call Ended`**: Session ended, displaying summary and reconnect option.
-- **Dual Visualizer:** Real-time visual audio waves and status badges ([`VoiceAgent.tsx`](file:///d:/Desktop/Challenge/10%20Days%20of%20AI%20Voice%20Agents/murf-livekit-starter/frontend/components/VoiceAgent.tsx)) showing speaker activity.
-- **Microphone Permission Handling:** Created [`PermissionError.tsx`](file:///d:/Desktop/Challenge/10%20Days%20of%20AI%20Voice%20Agents/murf-livekit-starter/frontend/components/PermissionError.tsx) displaying clear instructions if browser mic access is blocked.
+- **Dual Visualizer:** Real-time visual audio waves and status badges (`frontend/components/VoiceAgent.tsx`) showing speaker activity.
+- **Microphone Permission Handling:** Created `frontend/components/PermissionError.tsx` displaying clear instructions if browser mic access is blocked.
 - **Live Transcript & Logs:** Built live transcript viewer and real-time backend log modal.
 
 ### 💾 Day 4: Give Your Agent a Memory That Lasts
@@ -99,9 +100,24 @@
   - Returns structured JSON payloads (`success: true/false`, temperature, feels like, condition, precipitation probability, wind speed).
   - Bounded by a **5.0-second network timeout**.
   - On API failure or DNS error, the agent speaks a graceful fallback message (*"Sorry, I couldn't retrieve the latest weather information right now."*) and **never** hallucinates weather numbers.
+
 ### 📞 Day 6: Make Outbound Calls (Proactive Weather & Rain Alerts)
-- **Outbound Telephony Architecture:** Uses LiveKit Telephony API (`CreateSIPParticipantRequest` & `CreateAgentDispatchRequest`) integrated with Twilio SIP Trunking.
-- **Proactive Rain Alert Use Case:** Checks Open-Meteo forecasts for registered users with saved locations (e.g. Gautam in Veraval). Initiates an outbound call when `precipitation_probability >= WEATHER_ALERT_RAIN_THRESHOLD` (configurable default 70%).
+- **Outbound Telephony Architecture:** Uses LiveKit Telephony API (`CreateSIPParticipantRequest` & `CreateAgentDispatchRequest`) integrated with SIP Trunking for Linphone / mobile app calling.
+- **Proactive Rain Alert Trigger:** Checks Open-Meteo forecasts for registered users with saved locations (e.g., Gautam in Veraval). Initiates an outbound call when `precipitation_probability >= WEATHER_ALERT_RAIN_THRESHOLD` (default 70%).
+- **6-Step Interactive Outbound Call Lifecycle:**
+  ```
+  📞 1. Phone Rings -> Answer call on Linphone / Mobile App
+        ↓
+  👋 2. Intro & Weather Alert -> Agent speaks opening greeting & live weather info for Veraval
+        ↓
+  🗣️ 3. Follow-up Question -> Ask: "Will it rain tomorrow in Veraval?" -> Agent responds with forecast
+        ↓
+  🚫 4. Opt-Out Request -> Say: "Don't call me again" or "Stop calling me"
+        ↓
+  👋 5. Confirmation -> Agent confirms opt-out preference saved to SQLite DB
+        ↓
+  📴 6. Call Ends -> Agent automatically invokes end_call() and disconnects room
+  ```
 - **Mandatory 3-Part Spoken Opening:** In the first 2 spoken sentences, the agent explicitly states:
   1. **WHO**: *"Hello Gautam, this is Bharat Voice AI calling..."*
   2. **WHY**: *"...with a weather alert for your saved location Veraval."*
@@ -116,10 +132,13 @@
 
 ```
 murf-livekit-starter/
+├── DAY6_OUTBOUND_RED_TEAM.md # Day 6 Outbound Call Red Team & Safety Audit
 ├── DAY5_IMPLEMENTATION.md    # Day 5 Technical Architecture Document
 ├── DAY4_IMPLEMENTATION.md    # Day 4 Technical Architecture Document
-├── MEMORY_RED_TEAM.md        # Privacy & Security Red Team Suite
+├── MEMORY_RED_TEAM.md        # Day 4 Privacy & Security Red Team Suite
 ├── docs/
+│   ├── DAY6.md              # Day 6 Outbound Calling Specification & SIP Architecture
+│   ├── DAY6_IMPLEMENTATION.md
 │   ├── DAY5.md              # Day 5 Weather Tool Architecture & Schemas
 │   ├── DAY4.md              # Day 4 Memory Specification
 │   └── DAY3.md              # Day 3 Frontend Specification
@@ -128,11 +147,15 @@ murf-livekit-starter/
 │   ├── data/
 │   │   └── bharat_voice.db   # Persistent SQLite Database
 │   ├── src/
-│   │   ├── agent.py          # Entrypoint & Participant ID Resolver
+│   │   ├── agent.py          # Core Entrypoint & WebRTC Participant Resolver
 │   │   ├── agent/            # Prompts, Voice Agent, Guardrails, Memory Tools
-│   │   ├── memory/           # Database Manager & Memory Service
-│   │   └── services/         # Gemini LLM, Deepgram STT, Murf Falcon TTS, Weather Service
+│   │   ├── memory/           # SQLite Database Manager & Memory Service
+│   │   ├── services/         # Gemini LLM, Deepgram STT, Murf Falcon TTS, Weather & Alert Services
+│   │   └── telephony/        # Outbound Calling, Call Manager & LiveKit SIP Integration
 │   └── tests/                # Pytest Suite (56/56 Tests Passed)
+│       ├── test_6step_outbound_flow.py # End-to-end 6-step lifecycle test suite
+│       ├── test_outbound_calls.py      # Weather alert trigger & decision tests
+│       └── test_outbound_linphone.py   # SIP dispatch & call manager integration tests
 └── frontend/                 # Next.js Voice UI
     ├── app/api/token/route.ts# Token Route with Persistent UserId
     └── components/           # Voice Agent UI & State Management
@@ -152,6 +175,7 @@ LIVEKIT_API_SECRET=your_secret
 MURF_API_KEY=your_murf_key
 DEEPGRAM_API_KEY=your_deepgram_key
 GOOGLE_API_KEY=your_google_gemini_key
+LIVEKIT_SIP_OUTBOUND_TRUNK_ID=your_sip_trunk_id
 ```
 
 Copy `frontend/.env.example` to `frontend/.env.local` and set:
@@ -161,7 +185,7 @@ LIVEKIT_API_KEY=your_key
 LIVEKIT_API_SECRET=your_secret
 ```
 
-### 2. Run Backend Agent Server
+### 2. Run Inbound Backend Agent Server
 
 ```bash
 cd backend
@@ -169,10 +193,25 @@ uv sync
 uv run python src/agent.py dev
 ```
 
-### 3. Run Frontend UI
+### 3. Run Outbound Telephony Agent & Dial Script
+
+In **Terminal 1** (Agent Worker):
+```bash
+cd backend
+uv run python src/telephony/outbound/agent.py dev
+```
+
+In **Terminal 2** (Outbound Initiator):
+```bash
+cd backend
+uv run python src/telephony/outbound/dial.py --to gautammax
+```
+
+### 4. Run Frontend UI
 
 ```bash
-cd frontend
+cd backend
+cd ../frontend
 pnpm install
 pnpm dev
 ```
@@ -181,7 +220,7 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
-## 🗣️ Example Day 5 Live Tool Demo Session
+## 🗣️ Example Live Voice Demo Sessions
 
 ### Scenario 1: Real-Time Weather Lookup (Veraval):
 - **Farmer**: *"What's the weather in Veraval today?"*
@@ -203,6 +242,14 @@ Open `http://localhost:3000` in your browser.
 ### Scenario 4: Weather API Failure Handling (Simulated Timeout):
 - **Farmer**: *"What's the weather in Ahmedabad?"* -> *(Simulated API failure/timeout)*
 - **Spoken Response**: *"Sorry, I couldn't retrieve the latest weather information right now. Please try again in a moment."*
+
+### Scenario 5: Proactive 6-Step Outbound Weather Alert & Opt-Out:
+1. 📞 **Phone Rings** $\rightarrow$ Callee answers call on Linphone.
+2. 👋 **Opening Greeting**: *"Hello Gautam, this is Bharat Voice AI. I'm calling with a weather update for your saved location Veraval..."*
+3. 🗣️ **Follow-up Question**: Callee asks: *"Will it rain tomorrow in Veraval?"* $\rightarrow$ Agent responds: *"Tomorrow in Veraval, expect 27°C with high rain probability."*
+4. 🚫 **Opt-Out Request**: Callee says: *"Don't call me again"*.
+5. 👋 **Confirmation**: Agent responds: *"Understood Gautam. I have updated your preferences and will not place future alert calls to you."*
+6. 📴 **Call Ends**: Agent invokes `end_call()` tool and automatically disconnects the call session.
 
 ---
 
