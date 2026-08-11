@@ -204,24 +204,24 @@ murf-livekit-starter/
 
 Copy `backend/.env.example` to `backend/.env.local` and configure required API keys:
 ```env
-LIVEKIT_URL=wss://your-livekit-url
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
-MURF_API_KEY=your_murf_key
-DEEPGRAM_API_KEY=your_deepgram_key
-GOOGLE_API_KEY=your_google_gemini_key
-LIVEKIT_SIP_OUTBOUND_TRUNK_ID=ST_B4bMBK9TtaqH
-LINPHONE_USERNAME=gautammax
+LIVEKIT_URL=wss://<YOUR_LIVEKIT_PROJECT_URL>
+LIVEKIT_API_KEY=<YOUR_LIVEKIT_API_KEY>
+LIVEKIT_API_SECRET=<YOUR_LIVEKIT_API_SECRET>
+MURF_API_KEY=<YOUR_MURF_API_KEY>
+DEEPGRAM_API_KEY=<YOUR_DEEPGRAM_API_KEY>
+GOOGLE_API_KEY=<YOUR_GOOGLE_API_KEY>
+LIVEKIT_SIP_OUTBOUND_TRUNK_ID=<YOUR_LIVEKIT_SIP_OUTBOUND_TRUNK_ID>
+LINPHONE_USERNAME=<YOUR_LINPHONE_USERNAME>
 LINPHONE_DOMAIN=sip.linphone.org
-LINPHONE_SIP_URI=sip:gautammax@sip.linphone.org
+LINPHONE_SIP_URI=sip:<YOUR_LINPHONE_USERNAME>@sip.linphone.org
 OUTBOUND_TEST_MODE=true
 ```
 
 Copy `frontend/.env.example` to `frontend/.env.local` and set:
 ```env
-LIVEKIT_URL=wss://your-livekit-url
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
+LIVEKIT_URL=wss://<YOUR_LIVEKIT_PROJECT_URL>
+LIVEKIT_API_KEY=<YOUR_LIVEKIT_API_KEY>
+LIVEKIT_API_SECRET=<YOUR_LIVEKIT_API_SECRET>
 ```
 
 ### 2. Run Inbound Backend Agent Server
@@ -243,7 +243,7 @@ uv run python src/telephony/outbound/agent.py dev
 In **Terminal 2** (Outbound Initiator):
 ```bash
 cd backend
-uv run python src/telephony/outbound/dial.py --to gautammax
+uv run python src/telephony/outbound/dial.py --to <YOUR_LINPHONE_USERNAME>
 ```
 
 ### 4. Run Frontend UI

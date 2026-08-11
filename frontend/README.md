@@ -29,10 +29,10 @@ cp .env.example .env.local
 Fill in your LiveKit credentials (same project as the backend):
 
 ```env
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
-AGENT_NAME=my-agent
+LIVEKIT_URL=wss://<YOUR_LIVEKIT_PROJECT_URL>
+LIVEKIT_API_KEY=<YOUR_LIVEKIT_API_KEY>
+LIVEKIT_API_SECRET=<YOUR_LIVEKIT_API_SECRET>
+AGENT_NAME=bharat-voice-ai
 ```
 
 ### 3. Run
