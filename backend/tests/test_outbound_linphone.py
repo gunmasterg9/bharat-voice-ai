@@ -55,7 +55,6 @@ def test_outbound_consent_validation(memory_svc):
         user_id="gautammax", consent=True, opted_out=False
     )
 
-
     profile = memory_svc.get_user("gautammax")
     assert profile["outbound_call_consent"] is True
 
@@ -126,4 +125,3 @@ async def test_dial_linphone_success_flow(test_settings, memory_svc):
         assert mock_dispatch.called
         assert mock_sip.called
         assert mock_sip.call_args[1]["phone_number"] == "gautammax"
-

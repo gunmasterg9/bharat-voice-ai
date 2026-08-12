@@ -78,6 +78,22 @@ class Database:
             failure_code TEXT,
             failure_reason TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS escalations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference_id TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL,
+            name TEXT,
+            language TEXT,
+            reason TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            what_was_checked TEXT,
+            urgency TEXT NOT NULL DEFAULT 'LOW',
+            preferred_follow_up TEXT,
+            status TEXT NOT NULL DEFAULT 'OPEN',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
         with self.get_connection() as conn:
             conn.executescript(schema_sql)

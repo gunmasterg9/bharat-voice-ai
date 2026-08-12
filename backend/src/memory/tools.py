@@ -233,14 +233,181 @@ async def end_call_tool(
     try:
         if hasattr(agent, "room") and agent.room and hasattr(agent.room, "disconnect"):
             await agent.room.disconnect()
-            logger.info("[TOOLS] Room disconnected successfully via agent.room.disconnect()")
-        elif hasattr(agent, "_active_session") and agent._active_session and hasattr(agent._active_session, "aclose"):
+            logger.info(
+                "[TOOLS] Room disconnected successfully via agent.room.disconnect()"
+            )
+        elif (
+            hasattr(agent, "_active_session")
+            and agent._active_session
+            and hasattr(agent._active_session, "aclose")
+        ):
             await agent._active_session.aclose()
-            logger.info("[TOOLS] Session closed successfully via agent._active_session.aclose()")
-        elif hasattr(context, "session") and context.session and hasattr(context.session, "aclose"):
+            logger.info(
+                "[TOOLS] Session closed successfully via agent._active_session.aclose()"
+            )
+        elif (
+            hasattr(context, "session")
+            and context.session
+            and hasattr(context.session, "aclose")
+        ):
             await context.session.aclose()
-            logger.info("[TOOLS] Session closed successfully via context.session.aclose()")
+            logger.info(
+                "[TOOLS] Session closed successfully via context.session.aclose()"
+            )
     except Exception as exc:
         logger.warning("[TOOLS] Error during call disconnect: %s", exc)
 
     return "Call termination sequence initiated."
+
+
+@function_tool
+async def create_escalation_tool(
+    agent: Any,
+    context: RunContext,
+    reason: str,
+    summary: str,
+    what_was_checked: str | None = None,
+    urgency: str = "LOW",
+    preferred_follow_up: str | None = "phone",
+    user_permission: bool = False,
+    name: str | None = None,
+    language: str | None = None,
+) -> str:
+    """
+    Create a human-help request after explicit caller permission.
+
+    Args:
+        agent: Active BharatVoiceAgent instance.
+        reason: Explanation of why human help is needed (e.g. 'Weather data unavailable' or 'User explicitly requested human assistance').
+        summary: Short concise human summary (WHO needs help, WHAT happened, WHAT agent checked, URGENCY, LANGUAGE, PREFERRED FOLLOW-UP METHOD).
+        what_was_checked: Description of tools or steps already attempted.
+        urgency: Urgency level ('LOW', 'MEDIUM', 'HIGH'). Default is 'LOW'.
+        preferred_follow_up: Preferred contact method (default 'phone').
+        user_permission: MUST be set to True only after explicit user agreement.
+        name: Caller name if provided.
+        language: Preferred language of caller.
+    """
+    user_id = getattr(agent, "user_id", "default_user")
+    db_memory = getattr(agent, "db_memory", None) or get_memory_service()
+    current_state = getattr(agent, "permission_state", "NOT_ASKED")
+
+    logger.info(
+        "[ESCALATION] Permission check: state='%s', user_permission=%s",
+        current_state,
+        user_permission,
+    )
+
+    if current_state != "APPROVED" or not user_permission:
+        logger.warning(
+            "[ESCALATION] create_escalation blocked: state='%s', user_permission=%s",
+            current_state,
+            user_permission,
+        )
+        return json.dumps(
+            {
+                "success": False,
+                "reason": "USER_PERMISSION_REQUIRED",
+                "error": "permission_denied",
+                "message": "Action blocked: Escalation requires explicit caller permission (permission_state is not APPROVED).",
+            },
+            ensure_ascii=False,
+        )
+
+    logger.info("[ESCALATION] Creating request")
+    try:
+        res = db_memory.create_escalation(
+            user_id=user_id,
+            reason=reason,
+            summary=summary,
+            what_was_checked=what_was_checked,
+            urgency=urgency,
+            preferred_follow_up=preferred_follow_up,
+            name=name,
+            language=language,
+            user_permission=user_permission,
+        )
+        ref_id = res.get("reference_id", "ESC-UNKNOWN")
+        logger.info("[ESCALATION] Reference ID: %s", ref_id)
+        logger.info("[TOOLS] create_escalation result for user %s: %s", user_id, res)
+
+        # Update agent state machine based on tool result
+        if res.get("success"):
+            agent.escalation_state = "ESCALATION_CREATED"
+            agent.active_reference_id = ref_id
+            res["state"] = "ESCALATION_CREATED"
+            logger.info(
+                "[ESCALATION] State locked: ESCALATION_CREATED (ref=%s)", ref_id
+            )
+        else:
+            agent.escalation_state = "ESCALATION_FAILED"
+            res["state"] = "ESCALATION_FAILED"
+            logger.warning("[ESCALATION] State: ESCALATION_FAILED")
+
+        return json.dumps(res, ensure_ascii=False)
+    except Exception as exc:
+        logger.error("[TOOLS] Unexpected error creating escalation: %s", exc)
+        agent.escalation_state = "ESCALATION_FAILED"
+        return json.dumps(
+            {
+                "success": False,
+                "error": "tool_failure",
+                "state": "ESCALATION_FAILED",
+                "message": "Sorry, I couldn't create the human-help request right now. Please try again later.",
+            },
+            ensure_ascii=False,
+        )
+
+
+@function_tool
+async def switch_language_tool(
+    agent: Any,
+    context: RunContext,
+    target_language: str,
+) -> str:
+    """
+    Update active conversation language when user explicitly requests a language change.
+
+    Args:
+        agent: Active BharatVoiceAgent instance.
+        target_language: Requested language ('Hindi', 'Gujarati', 'English').
+    """
+    lang_clean = str(target_language or "").strip().lower()
+    if "hind" in lang_clean or "हिंदी" in lang_clean or "हिन्दी" in lang_clean:
+        normalized = "Hindi"
+        confirmation = "ठीक है। अब मैं आपसे हिंदी में बात करूंगी।"
+    elif "gujarat" in lang_clean or "ગુજરાતી" in lang_clean:
+        normalized = "Gujarati"
+        confirmation = "બરાબર. હવે હું તમારી સાથે ગુજરાતીમાં વાત કરીશ."
+    elif "eng" in lang_clean or "અંગ્રેજી" in lang_clean or "अंग्रेजी" in lang_clean:
+        normalized = "English"
+        confirmation = "Sure, I will speak with you in English now."
+    else:
+        normalized = "English"
+        confirmation = "Sure, I will speak with you in English now."
+
+    if hasattr(agent, "set_active_language"):
+        agent.set_active_language(normalized)
+    elif hasattr(agent, "active_language"):
+        agent.active_language = normalized
+
+    user_id = getattr(agent, "user_id", "default_user")
+    db_memory = getattr(agent, "db_memory", None) or get_memory_service()
+    if user_id and db_memory:
+        user_profile = db_memory.get_user(user_id)
+        if user_profile:
+            db_memory.update_language_preference(user_id, normalized)
+
+    logger.info(
+        "[TOOLS] switch_language_tool: active_language set to '%s' for user_id '%s'",
+        normalized,
+        user_id,
+    )
+    return json.dumps(
+        {
+            "success": True,
+            "active_language": normalized,
+            "confirmation": confirmation,
+            "message": f"Active language switched to {normalized}. Confirm to user using: {confirmation}",
+        },
+        ensure_ascii=False,
+    )

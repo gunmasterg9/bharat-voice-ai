@@ -47,7 +47,7 @@ export const WelcomeView = ({
 
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-4 flex flex-col items-center gap-2">
-            <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+            <span className="text-muted-foreground font-mono text-[10px] tracking-wider uppercase">
               Dev Admin Controls (Day 6)
             </span>
             <Button
@@ -56,7 +56,7 @@ export const WelcomeView = ({
               onClick={() => {
                 alert('Outbound Weather Alert Call Triggered! Check backend logs or test phone.');
               }}
-              className="w-64 rounded-full font-mono text-xs text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+              className="w-64 rounded-full border-amber-500/30 font-mono text-xs text-amber-500 hover:bg-amber-500/10"
             >
               📞 Test Outbound Call
             </Button>

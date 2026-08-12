@@ -12,13 +12,22 @@ export type AgentUIState =
   | 'PERMISSION_ERROR'
   | 'CONNECTION_ERROR';
 
+export type EscalationUIState =
+  | 'Human Help Requested'
+  | 'Waiting for Permission'
+  | 'Creating Request'
+  | 'Request Created'
+  | 'Permission Declined'
+  | 'Permission Needed';
+
 interface AgentStatusProps {
   status: AgentUIState;
   detectedLanguage?: string;
   micLabel?: string;
+  escalationState?: EscalationUIState;
 }
 
-export function AgentStatus({ status, detectedLanguage, micLabel }: AgentStatusProps) {
+export function AgentStatus({ status, detectedLanguage, micLabel, escalationState }: AgentStatusProps) {
   const renderStateDetails = () => {
     switch (status) {
       case 'READY':
@@ -102,7 +111,7 @@ export function AgentStatus({ status, detectedLanguage, micLabel }: AgentStatusP
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center space-y-1.5 px-4 text-center sm:space-y-2">
       {/* State Badge & Icon */}
-      <div className="flex items-center space-x-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <div className="bg-card border-border rounded-2xl border p-2 shadow-sm sm:p-2.5">
           {details.icon}
         </div>
@@ -119,6 +128,11 @@ export function AgentStatus({ status, detectedLanguage, micLabel }: AgentStatusP
         {detectedLanguage && (
           <span className="inline-flex items-center rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-semibold text-indigo-600 sm:px-3 sm:py-1 dark:text-indigo-400">
             Language: {detectedLanguage}
+          </span>
+        )}
+        {escalationState && (
+          <span className="inline-flex items-center rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-600 sm:px-3 sm:py-1 dark:text-rose-400">
+            Escalation: {escalationState}
           </span>
         )}
       </div>

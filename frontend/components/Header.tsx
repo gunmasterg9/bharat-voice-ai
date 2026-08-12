@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Mic, Radio, ShieldCheck, Sparkles } from 'lucide-react';
+import { Headphones, Mic, Radio, ShieldCheck, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 
 interface HeaderProps {
@@ -13,9 +13,11 @@ interface HeaderProps {
     | 'CALL_ENDED'
     | 'PERMISSION_ERROR'
     | 'CONNECTION_ERROR';
+  activeView?: 'agent' | 'human-help';
+  onViewChange?: (view: 'agent' | 'human-help') => void;
 }
 
-export function Header({ status }: HeaderProps) {
+export function Header({ status, activeView = 'agent', onViewChange }: HeaderProps) {
   const isConnected = status === 'LISTENING' || status === 'SPEAKING';
   const isConnecting = status === 'CONNECTING';
 
@@ -38,7 +40,7 @@ export function Header({ status }: HeaderProps) {
               </h1>
               <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                 <Sparkles className="mr-1 h-3 w-3" />
-                Day 4
+                Day 7
               </span>
             </div>
             <p className="text-muted-foreground hidden text-xs sm:block">
@@ -47,12 +49,40 @@ export function Header({ status }: HeaderProps) {
           </div>
         </div>
 
-        {/* Status Indicator, Memory Badge & Theme Toggle */}
+        {/* View Switcher Tabs & Controls */}
         <div className="flex items-center space-x-2 sm:space-x-3">
-          {/* Memory Status Badge (Integrated cleanly in header navbar) */}
-          <div className="flex items-center space-x-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+          {onViewChange && (
+            <div className="border-border bg-muted/40 flex items-center rounded-xl border p-1">
+              <button
+                onClick={() => onViewChange('agent')}
+                className={`flex items-center space-x-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  activeView === 'agent'
+                    ? 'bg-background text-foreground border-border border shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Mic className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Voice Agent</span>
+              </button>
+
+              <button
+                onClick={() => onViewChange('human-help')}
+                className={`flex items-center space-x-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  activeView === 'human-help'
+                    ? 'border border-amber-500/30 bg-amber-500/20 text-amber-600 dark:text-amber-300'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Headphones className="h-3.5 w-3.5 text-amber-500" />
+                <span>Human Help</span>
+              </button>
+            </div>
+          )}
+
+          {/* Memory Status Badge */}
+          <div className="hidden items-center space-x-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 sm:flex dark:text-amber-300">
             <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
-            <span>Memory: Active</span>
+            <span>Escalation: Ready</span>
           </div>
 
           {/* Connection Status Pill */}

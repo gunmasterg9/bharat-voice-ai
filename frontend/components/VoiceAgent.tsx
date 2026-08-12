@@ -8,6 +8,7 @@ import { ConnectionError } from '@/components/ConnectionError';
 import { ConversationTranscript } from '@/components/ConversationTranscript';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
+import { HumanHelpDashboard } from '@/components/HumanHelpDashboard';
 import { LiveSystemLog } from '@/components/LiveSystemLog';
 import { PermissionError } from '@/components/PermissionError';
 import { VoiceButton } from '@/components/VoiceButton';
@@ -20,6 +21,7 @@ export function VoiceAgent() {
   const [uiState, setUiState] = useState<AgentUIState>('READY');
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
   const [chatOpen, setChatOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'agent' | 'human-help'>('agent');
 
   // Sync LiveKit connection & agent state to UI state
   useEffect(() => {
@@ -190,78 +192,84 @@ export function VoiceAgent() {
   return (
     <div className="from-background via-background/95 to-muted/30 text-foreground flex h-dvh max-h-dvh flex-col overflow-hidden bg-gradient-to-b selection:bg-amber-500 selection:text-white">
       {/* Header Bar */}
-      <Header status={uiState} />
+      <Header status={uiState} activeView={activeView} onViewChange={setActiveView} />
 
-      {/* Main Voice Workspace */}
-      <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-2 sm:px-6">
-        {session.isConnected ? (
-          /* Side-by-side 2-column layout when connected */
-          <div className="grid w-full max-w-5xl grid-cols-1 items-start gap-4 md:grid-cols-12 md:gap-6">
-            {/* Left Column: Status, Visualizer, Control Bar */}
-            <div className="flex flex-col items-center justify-center space-y-2 sm:space-y-3 md:col-span-6">
+      {/* Main Workspace */}
+      {activeView === 'human-help' ? (
+        <main className="flex-1 overflow-y-auto">
+          <HumanHelpDashboard />
+        </main>
+      ) : (
+        <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-2 sm:px-6">
+          {session.isConnected ? (
+            /* Side-by-side 2-column layout when connected */
+            <div className="grid w-full max-w-5xl grid-cols-1 items-start gap-4 md:grid-cols-12 md:gap-6">
+              {/* Left Column: Status, Visualizer, Control Bar */}
+              <div className="flex flex-col items-center justify-center space-y-2 sm:space-y-3 md:col-span-6">
+                <AgentStatus status={uiState} micLabel={activeMicLabel} />
+                <AudioVisualizer status={uiState} />
+                <div className="w-full max-w-md pt-1">
+                  <AgentControlBar
+                    variant="livekit"
+                    isConnected={session.isConnected}
+                    isChatOpen={chatOpen}
+                    onIsChatOpenChange={setChatOpen}
+                    onDisconnect={handleEndCall}
+                    controls={{
+                      leave: true,
+                      microphone: true,
+                      camera: false,
+                      screenShare: false,
+                      chat: true,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Live Conversation Transcript & System API Logs */}
+              <div className="flex h-full w-full flex-col justify-center space-y-3 md:col-span-6">
+                <ConversationTranscript />
+                <LiveSystemLog status={uiState} />
+              </div>
+            </div>
+          ) : (
+            /* Centered single-column layout before call / on error / after call */
+            <div className="w-full max-w-3xl space-y-2 text-center sm:space-y-4">
+              {/* Active Agent Status Header */}
               <AgentStatus status={uiState} micLabel={activeMicLabel} />
-              <AudioVisualizer status={uiState} />
-              <div className="w-full max-w-md pt-1">
-                <AgentControlBar
-                  variant="livekit"
-                  isConnected={session.isConnected}
-                  isChatOpen={chatOpen}
-                  onIsChatOpenChange={setChatOpen}
-                  onDisconnect={handleEndCall}
-                  controls={{
-                    leave: true,
-                    microphone: true,
-                    camera: false,
-                    screenShare: false,
-                    chat: true,
-                  }}
-                />
+
+              {/* Central Visualizer Area */}
+              {uiState !== 'PERMISSION_ERROR' && uiState !== 'CONNECTION_ERROR' && (
+                <AudioVisualizer status={uiState} />
+              )}
+
+              {/* Error Views */}
+              {uiState === 'PERMISSION_ERROR' && <PermissionError onRetry={handleStartCall} />}
+
+              {uiState === 'CONNECTION_ERROR' && (
+                <ConnectionError onRetry={handleStartCall} message={errorMessage} />
+              )}
+
+              {/* Voice Button when pre/post call */}
+              {uiState !== 'PERMISSION_ERROR' && uiState !== 'CONNECTION_ERROR' && (
+                <div className="flex items-center justify-center pt-1 pb-2">
+                  <VoiceButton
+                    status={uiState}
+                    onStart={handleStartCall}
+                    onEnd={handleEndCall}
+                    onRestart={handleRestartCall}
+                  />
+                </div>
+              )}
+
+              {/* Live System & API Diagnostics Bar */}
+              <div className="w-full pt-1">
+                <LiveSystemLog status={uiState} />
               </div>
             </div>
-
-            {/* Right Column: Live Conversation Transcript & System API Logs */}
-            <div className="flex h-full w-full flex-col justify-center space-y-3 md:col-span-6">
-              <ConversationTranscript />
-              <LiveSystemLog status={uiState} />
-            </div>
-          </div>
-        ) : (
-          /* Centered single-column layout before call / on error / after call */
-          <div className="w-full max-w-3xl space-y-2 text-center sm:space-y-4">
-            {/* Active Agent Status Header */}
-            <AgentStatus status={uiState} micLabel={activeMicLabel} />
-
-            {/* Central Visualizer Area */}
-            {uiState !== 'PERMISSION_ERROR' && uiState !== 'CONNECTION_ERROR' && (
-              <AudioVisualizer status={uiState} />
-            )}
-
-            {/* Error Views */}
-            {uiState === 'PERMISSION_ERROR' && <PermissionError onRetry={handleStartCall} />}
-
-            {uiState === 'CONNECTION_ERROR' && (
-              <ConnectionError onRetry={handleStartCall} message={errorMessage} />
-            )}
-
-            {/* Voice Button when pre/post call */}
-            {uiState !== 'PERMISSION_ERROR' && uiState !== 'CONNECTION_ERROR' && (
-              <div className="flex items-center justify-center pt-1 pb-2">
-                <VoiceButton
-                  status={uiState}
-                  onStart={handleStartCall}
-                  onEnd={handleEndCall}
-                  onRestart={handleRestartCall}
-                />
-              </div>
-            )}
-
-            {/* Live System & API Diagnostics Bar */}
-            <div className="w-full pt-1">
-              <LiveSystemLog status={uiState} />
-            </div>
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      )}
 
       {/* Footer Bar */}
       <Footer />

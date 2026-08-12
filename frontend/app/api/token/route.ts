@@ -64,9 +64,7 @@ export async function POST(req: Request) {
 
     // Accept persistent caller ID from query param, body, or generate fallback
     const requestedUserId = queryUserId || body?.userId || body?.user_id;
-    const participantIdentity = requestedUserId
-      ? String(requestedUserId)
-      : 'default_user';
+    const participantIdentity = requestedUserId ? String(requestedUserId) : 'default_user';
 
     const participantName = 'user';
     const roomName =

@@ -9,6 +9,7 @@ silence management, Day 1 function tools, and Day 4 SQLite persistent memory too
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from livekit.agents import Agent, RunContext, function_tool
 
@@ -54,23 +55,324 @@ class BharatVoiceAgent(Agent):
         session_id: str = "default_session",
         user_id: str = "default_user",
         instructions: str | None = None,
+        db_memory: Any | None = None,
     ) -> None:
         """Initialize the agent with system instructions, session context, and persistent SQLite memory."""
         super().__init__(instructions=instructions or SYSTEM_PROMPT)
         self.session_id = session_id
         self.user_id = user_id
         self.memory = memory_store.get_or_create_session(session_id, user_id=user_id)
-        self.db_memory = get_memory_service()
+        self.db_memory = db_memory or get_memory_service()
         self.silence_count = 0
+        self.escalation_state: str = "IDLE"
+        self.active_reference_id: str | None = None
+
+        # Load caller's saved language preference if profile exists, else default to English
+        caller_profile = self.db_memory.get_user(self.user_id) or {}
+        self.active_language: str = (
+            caller_profile.get("language_preference") or "English"
+        )
 
         # Update last interaction timestamp in SQLite for returning user
         self.db_memory.update_last_interaction(self.user_id)
 
         logger.info(
-            "BharatVoiceAgent initialized for session: %s, user_id: %s",
+            "BharatVoiceAgent initialized for session: %s, user_id: %s, active_language: %s, escalation_state: %s",
             session_id,
             user_id,
+            self.active_language,
+            self.escalation_state,
         )
+
+    # Legacy property for backward compatibility with tools.py permission checks
+    @property
+    def permission_state(self) -> str:
+        """Map escalation_state to legacy permission_state values for tool compatibility."""
+        state_map = {
+            "IDLE": "NOT_ASKED",
+            "HUMAN_HELP_REQUESTED": "NOT_ASKED",
+            "WAITING_FOR_PERMISSION": "WAITING_FOR_PERMISSION",
+            "CREATING_ESCALATION": "APPROVED",
+            "ESCALATION_CREATED": "APPROVED",
+            "ESCALATION_DENIED": "DENIED",
+            "ESCALATION_FAILED": "NOT_ASKED",
+        }
+        return state_map.get(self.escalation_state, "NOT_ASKED")
+
+    @permission_state.setter
+    def permission_state(self, value: str) -> None:
+        """Map legacy permission_state setter to escalation_state for test compatibility."""
+        reverse_map = {
+            "NOT_ASKED": "IDLE",
+            "WAITING_FOR_PERMISSION": "WAITING_FOR_PERMISSION",
+            "APPROVED": "CREATING_ESCALATION",
+            "DENIED": "ESCALATION_DENIED",
+        }
+        self.escalation_state = reverse_map.get(value, "IDLE")
+
+    def update_permission_state_from_turn(self, user_text: str) -> None:
+        """
+        Deterministic escalation state machine.
+
+        States: IDLE, HUMAN_HELP_REQUESTED, WAITING_FOR_PERMISSION,
+                CREATING_ESCALATION, ESCALATION_CREATED, ESCALATION_DENIED,
+                ESCALATION_FAILED.
+
+        CRITICAL: Once ESCALATION_CREATED, the state is LOCKED.
+        Post-creation acknowledgements ("Yes", "Okay", "Thanks") are ignored
+        by the permission classifier — they do NOT trigger denial or re-creation.
+        """
+        import re
+
+        text_lower = user_text.lower().strip()
+
+        # ── LOCKED TERMINAL STATES ──────────────────────────────────
+        # Once escalation is created, only explicit cancellation changes state
+        if self.escalation_state == "ESCALATION_CREATED":
+            cancel_patterns = [
+                r"\bcancel (my |the |that )?request\b",
+                r"\bdelete (my |the |that )?request\b",
+                r"\bdon't send (it|that)\b",
+                r"\bdo not send\b",
+                r"अनुरोध रद्द",
+                r"વિનંતી રદ કરો",
+            ]
+            is_cancel = any(re.search(pat, text_lower) for pat in cancel_patterns)
+            if is_cancel:
+                logger.info("[ESCALATION] Post-creation cancellation requested")
+                # Cancellation is a separate action, not handled here
+                return
+            # All other messages (Yes, Okay, Thanks, etc.) — do nothing
+            logger.info(
+                "[ESCALATION] Post-creation acknowledgement (state locked at ESCALATION_CREATED)"
+            )
+            return
+
+        # Once denied, only a new human help request re-enters the flow
+        if self.escalation_state == "ESCALATION_DENIED":
+            # Check for new escalation intent to allow re-entry
+            escalation_keywords = [
+                "human",
+                "talk to human",
+                "talk a human",
+                "person",
+                "support person",
+                "human help",
+                "human assistance",
+                "connect to human",
+                "speak to a human",
+                "speak with someone",
+                "talk to someone",
+                "need help",
+                "इंसान",
+                "मानव",
+                "व्यक्ति",
+                "মানুষ",
+                "માનવ",
+                "વ્યક્તિ",
+                "ઈન્સાન",
+                "ઇન્સાન",
+            ]
+            has_new_intent = any(kw in text_lower for kw in escalation_keywords)
+            if has_new_intent:
+                self.escalation_state = "WAITING_FOR_PERMISSION"
+                logger.info(
+                    "[ESCALATION] Re-entry from DENIED: new human help requested"
+                )
+                logger.info("[ESCALATION] State: WAITING_FOR_PERMISSION")
+            return
+
+        # ── IDLE / HUMAN_HELP_REQUESTED — detect human escalation intent ──
+        if self.escalation_state in [
+            "IDLE",
+            "HUMAN_HELP_REQUESTED",
+            "ESCALATION_FAILED",
+        ]:
+            escalation_keywords = [
+                "human",
+                "talk to human",
+                "talk a human",
+                "person",
+                "support person",
+                "human help",
+                "human assistance",
+                "connect to human",
+                "speak to a human",
+                "speak with someone",
+                "talk to someone",
+                "need help",
+                "इंसान",
+                "मानव",
+                "व्यक्ति",
+                "মানুষ",
+                "માનવ",
+                "વ્યક્તિ",
+                "ઈન્સાન",
+                "ઇન્સાન",
+            ]
+            has_escalation_intent = any(kw in text_lower for kw in escalation_keywords)
+            if has_escalation_intent:
+                self.escalation_state = "WAITING_FOR_PERMISSION"
+                logger.info("[ESCALATION] Human help requested")
+                logger.info("[ESCALATION] State: WAITING_FOR_PERMISSION")
+            return
+
+        # ── WAITING_FOR_PERMISSION — classify YES / NO / AMBIGUOUS ──
+        if self.escalation_state == "WAITING_FOR_PERMISSION":
+            # 1. Questions & ambiguous patterns (MUST NEVER be treated as YES or NO)
+            question_patterns = [
+                r"\bwhy\b",
+                r"\bwhy not\b",
+                r"\bwhat information\b",
+                r"\bhow does it work\b",
+                r"\bwhat will you share\b",
+                r"\bcan you create\b",
+                r"\bplease explain\b",
+                r"\bwhat happens\b",
+                r"\btell me more\b",
+                r"\bmaybe\b",
+                r"\bnot sure\b",
+                r"\bim not sure\b",
+                r"કેમ",
+                r"શા માટે",
+                r"કઈ માહિતી",
+                r"કેવી રીતે",
+                r"क्यों",
+                r"क्यों नहीं",
+                r"क्या जानकारी",
+            ]
+
+            is_question_or_ambiguous = any(
+                re.search(pat, text_lower) for pat in question_patterns
+            ) or text_lower.endswith("?")
+
+            if is_question_or_ambiguous:
+                logger.info("[ESCALATION] User response classification: AMBIGUOUS")
+                logger.info("[ESCALATION] State: WAITING_FOR_PERMISSION")
+                return
+
+            # 2. Refusal patterns
+            no_patterns = [
+                r"\bno\b",
+                r"\bdon't\b",
+                r"\bdont\b",
+                r"\bdo not\b",
+                r"\brefuse\b",
+                r"\bcancel\b",
+                r"\bnot share\b",
+                r"\bnot create\b",
+                r"नहीं",
+                r"नही",
+                r"साझा मत करो",
+                r"शेयर मत करो",
+                r"मत बनाओ",
+                r"નહીં",
+                r"નહિ",
+                r"શેર ન કરો",
+                r"નથી કરવું",
+            ]
+
+            # 3. Approval patterns
+            yes_patterns = [
+                r"\byes\b",
+                r"\byeah\b",
+                r"\bokay\b",
+                r"\bok\b",
+                r"\bgo ahead\b",
+                r"\bcreate it\b",
+                r"\bplease create\b",
+                r"\bi agree\b",
+                r"\bsure\b",
+                r"\byep\b",
+                r"हाँ",
+                r"हां",
+                r"कर दीजिए",
+                r"ठीक है",
+                r"बना दीजिए",
+                r"હા",
+                r"બરાબર",
+                r"બનાવી દો",
+            ]
+
+            is_refusal = any(re.search(pat, text_lower) for pat in no_patterns)
+            is_approval = (
+                any(re.search(pat, text_lower) for pat in yes_patterns)
+                and not is_refusal
+            )
+
+            if is_refusal:
+                self.escalation_state = "ESCALATION_DENIED"
+                logger.info("[ESCALATION] User response classification: DENIED")
+                logger.info("[ESCALATION] State: ESCALATION_DENIED")
+            elif is_approval:
+                self.escalation_state = "CREATING_ESCALATION"
+                logger.info("[ESCALATION] User response classification: APPROVED")
+                logger.info("[ESCALATION] State: CREATING_ESCALATION")
+            else:
+                logger.info("[ESCALATION] User response classification: AMBIGUOUS")
+                logger.info("[ESCALATION] State: WAITING_FOR_PERMISSION")
+            return
+
+        # ── CREATING_ESCALATION — waiting for tool call, allow last-moment denial ──
+        if self.escalation_state == "CREATING_ESCALATION":
+            no_patterns = [
+                r"\bno\b",
+                r"\bdon't\b",
+                r"\bdont\b",
+                r"\bdo not\b",
+                r"\brefuse\b",
+                r"\bcancel\b",
+                r"\bnot share\b",
+                r"\bnot create\b",
+                r"नहीं",
+                r"नही",
+                r"નહીં",
+                r"નહિ",
+            ]
+            is_refusal = any(re.search(pat, text_lower) for pat in no_patterns)
+            if is_refusal:
+                self.escalation_state = "ESCALATION_DENIED"
+                logger.info(
+                    "[ESCALATION] Last-moment denial during CREATING_ESCALATION"
+                )
+                logger.info("[ESCALATION] State: ESCALATION_DENIED")
+            else:
+                logger.info(
+                    "[ESCALATION] State: CREATING_ESCALATION (awaiting tool call)"
+                )
+            return
+
+    def set_active_language(self, language: str, update_db: bool = True) -> str:
+        """
+        Update the active conversation language and optionally persist to SQLite.
+
+        Args:
+            language: Target language ('Hindi', 'Gujarati', 'English').
+            update_db: Whether to update language_preference in SQLite.
+        """
+        lang_clean = str(language or "").strip().lower()
+        if "hind" in lang_clean or "हिंदी" in lang_clean or "हिन्दी" in lang_clean:
+            normalized = "Hindi"
+        elif "gujarat" in lang_clean or "ગુજરાતી" in lang_clean:
+            normalized = "Gujarati"
+        elif "eng" in lang_clean or "अंग्र" in lang_clean or "અંગ્રેજી" in lang_clean:
+            normalized = "English"
+        else:
+            normalized = language.capitalize()
+
+        self.active_language = normalized
+        logger.info(
+            "BharatVoiceAgent active_language updated to '%s' for user_id '%s'",
+            normalized,
+            self.user_id,
+        )
+
+        if update_db:
+            user_profile = self.db_memory.get_user(self.user_id)
+            if user_profile:
+                self.db_memory.update_language_preference(self.user_id, normalized)
+
+        return normalized
 
     async def process_user_turn(self, user_text: str) -> str:
         """
@@ -83,6 +385,7 @@ class BharatVoiceAgent(Agent):
             Instructions/context override or immediate refusal message if guardrails trigger.
         """
         self.silence_count = 0  # Reset silence counter on speech
+        self.update_permission_state_from_turn(user_text)
 
         # 1. Evaluate input safety guardrails
         guardrail_result = guardrail_engine.check_input(user_text)
@@ -93,11 +396,48 @@ class BharatVoiceAgent(Agent):
             )
             return guardrail_result.refusal_message or DEFAULT_ESCALATION_RESPONSE
 
-        # 2. Detect user language profile
+        # 2. Check for explicit language switch requests
+        lower_text = user_text.lower().strip()
+        switch_phrases = [
+            "change language",
+            "switch language",
+            "switch to",
+            "speak in",
+            "speak ",
+            "ગુજરાતીમાં વાત કરો",
+            "ગુજરાતી બોલો",
+            "हिंदी में बात करें",
+            "हिंदी में बोलिए",
+            "हिंदी बोलो",
+            "भाषा बदलो",
+            "ભાષા બદલો",
+        ]
+        is_switch_intent = any(phrase in lower_text for phrase in switch_phrases)
+
+        if (
+            is_switch_intent
+            or "gujarati" in lower_text
+            or "ગુજરાતી" in lower_text
+            or "hindi" in lower_text
+            or "हिंदी" in lower_text
+            or "हिन्दी" in lower_text
+        ):
+            if "gujarat" in lower_text or "ગુજરાતી" in lower_text:
+                self.set_active_language("Gujarati")
+            elif "hind" in lower_text or "हिंदी" in lower_text or "हिन्दी" in lower_text:
+                self.set_active_language("Hindi")
+            elif (
+                "english" in lower_text
+                or "अंग्रेजी" in lower_text
+                or "અંગ્રેજી" in lower_text
+            ):
+                self.set_active_language("English")
+
+        # 3. Detect user language profile
         profile = language_detector.detect(user_text)
         log_language_detection(profile.code, profile.name)
 
-        # 3. Store user turn in in-memory session history
+        # 4. Store user turn in in-memory session history
         memory_store.add_turn(
             session_id=self.session_id,
             role="user",
@@ -540,3 +880,62 @@ class BharatVoiceAgent(Agent):
         from memory.tools import end_call_tool
 
         return await end_call_tool(agent=self, context=context, reason=reason)
+
+    @function_tool
+    async def create_escalation(
+        self,
+        context: RunContext,
+        reason: str,
+        summary: str,
+        what_was_checked: str | None = None,
+        urgency: str = "LOW",
+        preferred_follow_up: str | None = "phone",
+        user_permission: bool = False,
+        name: str | None = None,
+        language: str | None = None,
+    ) -> str:
+        """
+        Create a human-help request AFTER explicit caller permission.
+
+        Args:
+            reason: Reason why human help is needed (e.g. 'Weather data unavailable' or 'User explicitly requested human assistance').
+            summary: Short concise human summary (WHO needs help, WHAT happened, WHAT agent checked, URGENCY, LANGUAGE, PREFERRED FOLLOW-UP METHOD).
+            what_was_checked: Tools or checks already performed by agent.
+            urgency: Urgency level ('LOW', 'MEDIUM', 'HIGH'). Default 'LOW'.
+            preferred_follow_up: Preferred contact method (e.g. 'phone').
+            user_permission: MUST be set to True only after the caller explicitly grants permission.
+            name: Caller name if provided.
+            language: Preferred language of caller.
+        """
+        from memory.tools import create_escalation_tool
+
+        return await create_escalation_tool(
+            agent=self,
+            context=context,
+            reason=reason,
+            summary=summary,
+            what_was_checked=what_was_checked,
+            urgency=urgency,
+            preferred_follow_up=preferred_follow_up,
+            user_permission=user_permission,
+            name=name,
+            language=language,
+        )
+
+    @function_tool
+    async def switch_language(
+        self,
+        context: RunContext,
+        target_language: str,
+    ) -> str:
+        """
+        Switch active conversation language when user explicitly requests a language change.
+
+        Args:
+            target_language: Target language ('Hindi', 'Gujarati', 'English').
+        """
+        from memory.tools import switch_language_tool
+
+        return await switch_language_tool(
+            agent=self, context=context, target_language=target_language
+        )

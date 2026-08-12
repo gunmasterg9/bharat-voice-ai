@@ -18,6 +18,15 @@ GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 REQUEST_TIMEOUT_SECONDS = 5.0
 
+# Location aliases mapping speech recognition variations to preferred search terms
+LOCATION_ALIASES: dict[str, str] = {
+    "vedawal": "Veraval, Gujarat, India",
+    "veraval": "Veraval, Gujarat, India",
+    "veraval gujarat": "Veraval, Gujarat, India",
+    "veraval, gujarat": "Veraval, Gujarat, India",
+    "vedaval gujarat": "Veraval, Gujarat, India",
+}
+
 # WMO Weather Interpretation Codes (WW) mapping to natural condition text
 WMO_WEATHER_CODES: dict[int, str] = {
     0: "Clear sky",
@@ -71,6 +80,15 @@ class WeatherService:
             Structured dictionary with 'success': True and 'data' dict, or 'success': False and 'error'.
         """
         clean_location = location.strip() if location else ""
+        logger.info("[WEATHER] Tool called")
+        logger.info("[WEATHER] Request location = %s", clean_location)
+
+        # Apply speech alias normalization
+        loc_key = clean_location.lower().strip()
+        if loc_key in LOCATION_ALIASES:
+            clean_location = LOCATION_ALIASES[loc_key]
+            logger.info("[WEATHER] Normalized speech location to '%s'", clean_location)
+
         if not clean_location or len(clean_location) < 2:
             logger.warning(
                 "[WEATHER SERVICE] Invalid or empty location provided: '%s'", location
@@ -84,6 +102,7 @@ class WeatherService:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Step 1: Geocoding Resolution
+                logger.info("[WEATHER] API request started")
                 logger.info(
                     "[WEATHER SERVICE] Geocoding request for location '%s'",
                     clean_location,
@@ -99,6 +118,7 @@ class WeatherService:
                 )
                 geo_resp.raise_for_status()
                 geo_data = geo_resp.json()
+                logger.info("[WEATHER] API response received")
 
                 results = geo_data.get("results")
                 if not results:
@@ -185,6 +205,7 @@ class WeatherService:
                     "source": "Open-Meteo",
                     "retrieved_at": datetime.now().isoformat(),
                 }
+                logger.info("[WEATHER] Result parsed")
 
                 logger.info(
                     "[WEATHER SERVICE] Successfully fetched weather for '%s': %d C, %s",
@@ -200,7 +221,7 @@ class WeatherService:
 
         except httpx.TimeoutException:
             logger.error(
-                "[WEATHER SERVICE] Timeout fetching weather data for '%s'",
+                "[WEATHER ERROR] Timeout fetching weather data for '%s'",
                 clean_location,
             )
             return {
@@ -210,7 +231,7 @@ class WeatherService:
             }
         except httpx.HTTPError as exc:
             logger.error(
-                "[WEATHER SERVICE] HTTP error fetching weather for '%s': %s",
+                "[WEATHER ERROR] HTTP error fetching weather for '%s': %s",
                 clean_location,
                 str(exc),
             )
@@ -221,7 +242,7 @@ class WeatherService:
             }
         except Exception as exc:
             logger.error(
-                "[WEATHER SERVICE] Unexpected error fetching weather for '%s': %s",
+                "[WEATHER ERROR] Unexpected error fetching weather for '%s': %s",
                 clean_location,
                 str(exc),
             )

@@ -115,7 +115,6 @@ async def create_sip_participant(
             media_encryption=lk_api.SIP_MEDIA_ENCRYPT_ALLOW,
         )
 
-
         logger.info(
             "[TELEPHONY] Creating SIP participant for '%s' in room '%s' using trunk '%s'...",
             phone_number,

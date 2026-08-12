@@ -96,7 +96,6 @@ async def dial_linphone(to_user: str) -> None:
     user_id = dest_username
     user_profile = memory.get_user(user_id) or memory.get_user("gautam")
 
-
     if not user_profile:
         # Seed test user profile for Gautam
         print(f"[OUTBOUND] Initializing user profile for '{user_id}'...")
@@ -111,7 +110,9 @@ async def dial_linphone(to_user: str) -> None:
 
     has_consent = user_profile.get("outbound_call_consent", True)
     if not has_consent:
-        print(f"[OUTBOUND] Re-enabling outbound calling consent for user '{user_id}'...")
+        print(
+            f"[OUTBOUND] Re-enabling outbound calling consent for user '{user_id}'..."
+        )
         memory.update_outbound_consent(user_id=user_id, consent=True, opted_out=False)
         memory.update_outbound_consent(user_id="gautam", consent=True, opted_out=False)
         user_profile = memory.get_user(user_id) or memory.get_user("gautam")
@@ -171,13 +172,15 @@ async def dial_linphone(to_user: str) -> None:
             print("DIAGNOSTIC HINT — SIP STATUS 488 (Not acceptable here):")
             print("Linphone rejected the SDP media encryption offer.")
             print("To fix this in Linphone Mobile App:")
-            print("1. Go to Settings -> Audio (or Settings -> Account -> Media Encryption).")
-            print("2. Set 'Media Encryption' to 'SRTP' or 'None' (Disabled). Do NOT use ZRTP.")
+            print(
+                "1. Go to Settings -> Audio (or Settings -> Account -> Media Encryption)."
+            )
+            print(
+                "2. Set 'Media Encryption' to 'SRTP' or 'None' (Disabled). Do NOT use ZRTP."
+            )
             print("3. Verify Linphone status shows 'Connected' / 'Online' and retry.")
             print("=" * 60)
         sys.exit(1)
-
-
 
 
 def main() -> None:

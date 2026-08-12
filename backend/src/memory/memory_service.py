@@ -63,6 +63,28 @@ SENSITIVE_KEYWORDS = {
 }
 
 
+def scrub_sensitive_text(text: str | None) -> str:
+    """
+    Scrub passwords, OTPs, PINs, bank accounts, card numbers, API keys from free text.
+    """
+    if not text:
+        return ""
+    import re
+
+    result = str(text)
+    patterns = [
+        (
+            r"(?i)\b(password|passwords|passwd|otp|otps|pin|pins|cvv|api_key|api_secret|auth_token|token|card_number|account_number|bank_account|sip_password)\b(\s*[:=]|\s+is|\s+was|\s+code|\s+no|\s+number)?\s*['\"]?\w+['\"]?",
+            r"\1: [REDACTED]",
+        ),
+        (r"\b\d{13,19}\b", "[REDACTED_CARD_OR_ACCOUNT]"),
+        (r"\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}\b", "[REDACTED_CARD]"),
+    ]
+    for pat, repl in patterns:
+        result = re.sub(pat, repl, result)
+    return result
+
+
 def sanitize_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """
     Scrub sensitive credentials from facts dictionary before storage.
@@ -475,6 +497,208 @@ class MemoryService:
             status,
             reason,
         )
+
+    # -----------------------------------------------------------------
+    # Day 7 Human Help & Escalation Methods
+    # -----------------------------------------------------------------
+
+    def create_escalation(
+        self,
+        user_id: str,
+        reason: str,
+        summary: str,
+        what_was_checked: str | None = None,
+        urgency: str = "LOW",
+        preferred_follow_up: str | None = "phone",
+        name: str | None = None,
+        language: str | None = None,
+        user_permission: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Create a human-help escalation request in SQLite.
+
+        Enforces explicit user permission, privacy filtering, duplicate request prevention,
+        and dynamic reference ID generation in format ESC-YYYYMMDD-XXXX.
+        """
+        logger.info("[DB] Database path: %s", getattr(self.db, "db_path", "unknown"))
+        logger.info("[ESCALATION] Human help intent detected")
+
+        if not user_permission:
+            logger.warning(
+                "[ESCALATION] Creation blocked: explicit user_permission is False"
+            )
+            return {
+                "success": False,
+                "error": "permission_denied",
+                "message": "Escalation request requires explicit user permission.",
+            }
+
+        # 1. Duplicate check: look for OPEN escalation for same user and matching reason
+        clean_reason = scrub_sensitive_text(reason or "Human help requested")
+        existing = self.db.execute_read(
+            "SELECT reference_id, status FROM escalations "
+            "WHERE user_id = ? AND status = 'OPEN' AND reason = ? ORDER BY created_at DESC LIMIT 1;",
+            (user_id, clean_reason),
+        )
+        if existing:
+            ref_id = existing[0]["reference_id"]
+            logger.info(
+                "[ESCALATION] Duplicate OPEN request found for user '%s', returning existing ref '%s'",
+                user_id,
+                ref_id,
+            )
+            return {
+                "success": True,
+                "reference_id": ref_id,
+                "status": "OPEN",
+                "is_duplicate": True,
+            }
+
+        # 2. Generate dynamic reference ID: ESC-YYYYMMDD-XXXX
+        now_dt = datetime.now(timezone.utc)
+        date_str = now_dt.strftime("%Y%m%d")
+        count_rows = self.db.execute_read(
+            "SELECT COUNT(*) as cnt FROM escalations WHERE reference_id LIKE ?;",
+            (f"ESC-{date_str}-%",),
+        )
+        seq_num = (count_rows[0]["cnt"] if count_rows else 0) + 1
+        reference_id = f"ESC-{date_str}-{seq_num:04d}"
+        logger.info("[ESCALATION] Generated reference ID: %s", reference_id)
+
+        # 3. Scrub sensitive fields
+        clean_summary = scrub_sensitive_text(summary or "User requested human support.")
+        clean_checked = scrub_sensitive_text(
+            what_was_checked or "Voice agent initial triage."
+        )
+        clean_name = scrub_sensitive_text(name) if name else None
+        clean_lang = scrub_sensitive_text(language) if language else None
+        clean_urgency = (
+            urgency.upper()
+            if urgency and urgency.upper() in ["LOW", "MEDIUM", "HIGH"]
+            else "LOW"
+        )
+        clean_follow_up = (
+            scrub_sensitive_text(preferred_follow_up)
+            if preferred_follow_up
+            else "phone"
+        )
+        now_iso = now_dt.isoformat()
+
+        # 4. Insert into SQLite
+        try:
+            logger.info("[DB] Escalation INSERT")
+            self.db.execute_write(
+                "INSERT INTO escalations "
+                "(reference_id, user_id, name, language, reason, summary, what_was_checked, urgency, preferred_follow_up, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?);",
+                (
+                    reference_id,
+                    user_id,
+                    clean_name,
+                    clean_lang,
+                    clean_reason,
+                    clean_summary,
+                    clean_checked,
+                    clean_urgency,
+                    clean_follow_up,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            logger.info("[DB] Escalation COMMIT successful")
+
+            # 5. Verification step: read back record to confirm database write
+            record = self.get_escalation_by_ref(reference_id)
+            if not record:
+                logger.error(
+                    "[ESCALATION ERROR] Verification read failed for ref_id '%s'",
+                    reference_id,
+                )
+                return {
+                    "success": False,
+                    "error": "database_verification_failed",
+                    "message": "Failed to verify escalation record persistence in database.",
+                }
+
+            logger.info(
+                "[DB] Escalation verification successful: ref_id=%s, status=%s",
+                reference_id,
+                record["status"],
+            )
+            logger.info("[ESCALATION] Request created successfully: %s", reference_id)
+            return {
+                "success": True,
+                "reference_id": reference_id,
+                "status": "OPEN",
+            }
+        except Exception as exc:
+            logger.error(
+                "[ESCALATION ERROR] Database write failed for user %s: %s", user_id, exc
+            )
+            return {
+                "success": False,
+                "error": "database_error",
+                "message": "Failed to create escalation record in database.",
+            }
+
+    def get_escalations(
+        self, status: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Retrieve stored escalation records ordered by created_at DESC."""
+        try:
+            if status:
+                rows = self.db.execute_read(
+                    "SELECT id, reference_id, user_id, name, language, reason, summary, what_was_checked, urgency, preferred_follow_up, status, created_at, updated_at "
+                    "FROM escalations WHERE status = ? ORDER BY created_at DESC LIMIT ?;",
+                    (status.upper(), limit),
+                )
+            else:
+                rows = self.db.execute_read(
+                    "SELECT id, reference_id, user_id, name, language, reason, summary, what_was_checked, urgency, preferred_follow_up, status, created_at, updated_at "
+                    "FROM escalations ORDER BY created_at DESC LIMIT ?;",
+                    (limit,),
+                )
+            return [dict(r) for r in rows]
+        except Exception as exc:
+            logger.error("Error retrieving escalations: %s", exc)
+            return []
+
+    def get_escalation_by_ref(self, reference_id: str) -> dict[str, Any] | None:
+        """Fetch a single escalation record by reference_id."""
+        try:
+            rows = self.db.execute_read(
+                "SELECT id, reference_id, user_id, name, language, reason, summary, what_was_checked, urgency, preferred_follow_up, status, created_at, updated_at "
+                "FROM escalations WHERE reference_id = ?;",
+                (reference_id,),
+            )
+            return dict(rows[0]) if rows else None
+        except Exception as exc:
+            logger.error("Error retrieving escalation %s: %s", reference_id, exc)
+            return None
+
+    def update_escalation_status(
+        self, reference_id: str, new_status: str
+    ) -> dict[str, Any] | None:
+        """Update escalation status (OPEN, IN_PROGRESS, RESOLVED)."""
+        valid_statuses = ["OPEN", "IN_PROGRESS", "RESOLVED"]
+        target_status = new_status.upper() if new_status else ""
+        if target_status not in valid_statuses:
+            logger.warning(
+                "Invalid escalation status transition attempt: %s", new_status
+            )
+            return None
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        rowcount = self.db.execute_write(
+            "UPDATE escalations SET status = ?, updated_at = ? WHERE reference_id = ?;",
+            (target_status, now_iso, reference_id),
+        )
+        if rowcount > 0:
+            logger.info(
+                "Updated escalation %s status to %s", reference_id, target_status
+            )
+            return self.get_escalation_by_ref(reference_id)
+        return None
 
 
 # Singleton memory service

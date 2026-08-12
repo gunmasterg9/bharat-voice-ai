@@ -11,6 +11,7 @@ Verifies the complete 6-step outbound call workflow:
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from agent.config import Settings, TelephonyConfig
@@ -51,8 +52,12 @@ async def test_step1_phone_rings_and_answered(test_settings, memory_svc):
     """Step 1: Outbound call initiator dials destination and receives ANSWERED state."""
     manager = OutboundCallManager(settings=test_settings, memory_service=memory_svc)
 
-    memory_svc.save_user(user_id="gautam", name="Gautam", language_preference="Gujarati")
-    memory_svc.update_user_phone(user_id="gautam", phone_number="+919876543210", verified=True)
+    memory_svc.save_user(
+        user_id="gautam", name="Gautam", language_preference="Gujarati"
+    )
+    memory_svc.update_user_phone(
+        user_id="gautam", phone_number="+919876543210", verified=True
+    )
     memory_svc.update_outbound_consent(user_id="gautam", consent=True, opted_out=False)
 
     weather_data = {"precipitation_probability": 85, "condition": "Heavy rain"}
@@ -101,7 +106,9 @@ async def test_step3_follow_up_question_forecast(test_db, memory_svc):
     context_mock = MagicMock()
 
     # Query 2-day forecast
-    res_str = await agent.get_weather(context=context_mock, location="Veraval", forecast_days=2)
+    res_str = await agent.get_weather(
+        context=context_mock, location="Veraval", forecast_days=2
+    )
     assert "success" in res_str
     assert "Gujarat" in res_str or "Ver" in res_str
 
@@ -122,11 +129,17 @@ async def test_step4_and_step5_opt_out_and_confirmation(memory_svc):
         agent=agent, context=context_mock, consent=False, opt_out=True
     )
 
-    assert "will not place future alert calls" in confirm_msg or "preferences" in confirm_msg
+    assert (
+        "will not place future alert calls" in confirm_msg
+        or "preferences" in confirm_msg
+    )
 
     # Verify SQLite DB reflects opt-out
     updated_user = memory_svc.get_user("gautam")
-    assert updated_user["outbound_call_consent"] is False or updated_user["opted_out"] is True
+    assert (
+        updated_user["outbound_call_consent"] is False
+        or updated_user["opted_out"] is True
+    )
 
 
 @pytest.mark.asyncio

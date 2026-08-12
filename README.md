@@ -158,6 +158,20 @@ Phone
 - **Calling Hours & Duplicate Suppression:** Enforces reasonable calling hours (`OUTBOUND_CALL_START_HOUR=8` to `OUTBOUND_CALL_END_HOUR=20`) and suppresses duplicate alert calls within 24 hours.
 - **Log Privacy & Test Mode:** Masks phone numbers in normal logs (`+91******3210`) and enforces `OUTBOUND_TEST_MODE=true` targeting `OUTBOUND_TEST_PHONE_NUMBER` for safety.
 
+### 🆘 Day 7: Know When to Ask for Human Help (Human Help / Escalation Protocol)
+- **Autonomous Human Help Detection:** Bharat Voice AI detects when a problem cannot be solved reliably and safely (e.g. weather service API timeouts/unavailability, or explicit caller requests for human support).
+- **Explicit Permission Flow ("Ask before creating"):**
+  - Explains why human help is needed and what information will be shared (name, problem, what was checked, language, urgency).
+  - Asks for explicit permission (*"Is that okay?"*, *"શું હું વિનંતી બનાવી શકું?"*).
+  - If user denies permission (*"No"*, *"Don't share"*), **no escalation is created**.
+- **Privacy First & Data Hygiene:**
+  - Automatically scrubs passwords, OTPs, PINs, bank accounts, card numbers, API credentials, and secrets.
+  - Never stores full conversation transcripts; generates short concise summaries instead.
+- **Dynamic Reference ID Generation:** Generates dynamic reference IDs in `ESC-YYYYMMDD-XXXX` format (e.g. `ESC-20260812-0001`).
+- **Duplicate Request Prevention:** Automatically checks for open duplicate requests from the same caller and returns the existing reference ID.
+- **Human Help Dashboard UI:** Built Next.js operator dashboard (`Bharat Voice AI - Human Help`) with status filter tabs (`ALL`, `OPEN`, `IN_PROGRESS`, `RESOLVED`) and validated status transition backend API routes.
+- **Honest Next Steps:** Explains next steps to caller without false promises of instant call backs.
+
 ---
 
 ## 📂 Repository Structure
@@ -176,7 +190,8 @@ murf-livekit-starter/
 │   ├── DAY5.md              # Day 5 Weather Tool Architecture & Schemas
 │   ├── DAY6.md              # Day 6 Outbound Calling Specification & SIP Architecture
 │   ├── DAY6_IMPLEMENTATION.md
-│   └── DAY6_LINPHONE_SETUP.md# Linphone SIP Client Configuration Guide
+│   ├── DAY6_LINPHONE_SETUP.md# Linphone SIP Client Configuration Guide
+│   └── DAY7_HUMAN_ESCALATION.md # Day 7 Human Help & Escalation Architecture
 ├── README.md                 # Master README (This File)
 ├── backend/
 │   ├── data/

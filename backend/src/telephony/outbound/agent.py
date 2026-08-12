@@ -149,12 +149,7 @@ async def outbound_voice_session(ctx: JobContext) -> None:
             )
             logger.info("[AUDIO] SIP audio input available")
 
-        user_id = (
-            outbound_metadata.get("user_id")
-            or participant_identity
-            or user_id
-        )
-
+        user_id = outbound_metadata.get("user_id") or participant_identity or user_id
 
         user_name = outbound_metadata.get("user_name", "Gautam")
         language = outbound_metadata.get("language", "Gujarati")
@@ -295,7 +290,9 @@ async def outbound_voice_session(ctx: JobContext) -> None:
         print("[OUTBOUND AGENT] STEP 3: Speaking Opening Greeting via Murf TTS...")
         logger.info("[OUTBOUND AGENT] Speaking mandatory opening greeting...")
         await session.say(greeting)
-        print("[OUTBOUND AGENT] STEP 4: Greeting Spoken Successfully! Listening for User Speech...")
+        print(
+            "[OUTBOUND AGENT] STEP 4: Greeting Spoken Successfully! Listening for User Speech..."
+        )
         logger.info("[OUTPUT] Agent audio published")
         logger.info("[OUTBOUND] Conversation active")
 
@@ -304,7 +301,10 @@ async def outbound_voice_session(ctx: JobContext) -> None:
 
         @ctx.room.on("participant_disconnected")
         def _on_participant_disconnected(p: rtc.RemoteParticipant):
-            logger.info("[OUTBOUND] SIP participant disconnected: %s", getattr(p, "identity", "unknown"))
+            logger.info(
+                "[OUTBOUND] SIP participant disconnected: %s",
+                getattr(p, "identity", "unknown"),
+            )
             logger.info("[DEBUG] SIP DISCONNECT EVENT")
             disconnect_event.set()
 
@@ -314,7 +314,9 @@ async def outbound_voice_session(ctx: JobContext) -> None:
             logger.info("[DEBUG] ROOM DISCONNECTED EVENT")
             disconnect_event.set()
 
-        logger.info("[OUTBOUND] Waiting for conversation completion / participant hangup...")
+        logger.info(
+            "[OUTBOUND] Waiting for conversation completion / participant hangup..."
+        )
         try:
             await disconnect_event.wait()
         finally:
@@ -325,7 +327,6 @@ async def outbound_voice_session(ctx: JobContext) -> None:
         logger.error("[DEBUG] EXCEPTION: %s: %s", type(exc).__name__, str(exc))
         log_session_error(exc, context="outbound pipeline setup")
         raise
-
 
 
 if __name__ == "__main__":
