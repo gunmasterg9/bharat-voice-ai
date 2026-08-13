@@ -1,8 +1,15 @@
 .env
 .env.*
 !.env.example
+*.db
+__pycache__/
+.venv/
+node_modules/
+dist/
+build/
+.pytest_cache/
+.next/
 .DS_Store
 *.exe
-__pycache__/
-.pytest_cache/
+
 

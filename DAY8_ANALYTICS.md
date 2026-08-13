@@ -150,3 +150,10 @@ uv run pytest tests/test_analytics.py
 2. Initiate a real browser call and ask for weather in Veraval.
 3. Upon call disconnect, the dashboard auto-refreshes every 5 seconds.
 4. Total Calls increases by 1, Successful Calls increases by 1.
+
+---
+
+## 7. Known Limitations
+- SQLite concurrent write access is safely handled via WAL journal mode, but high multi-threaded concurrency (>100 active connections) would benefit from PostgreSQL in enterprise production deployments.
+- Call duration calculation relies on client/server ISO timestamps; clock drift on un-synced host devices could alter duration measurements slightly.
+

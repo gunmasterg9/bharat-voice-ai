@@ -194,3 +194,25 @@ def test_recent_calls_safe_fields(analytics_svc):
         "escalation_created",
     }
     assert set(c.keys()).issubset(safe_keys)
+
+
+def test_call_id_uniqueness_and_duplicate_start(analytics_svc):
+    """Verify duplicate call_id starts update existing record without creating duplicates."""
+    analytics_svc.record_call_start("unique_call_101", "user_orig", "BROWSER", "English")
+    analytics_svc.record_call_start("unique_call_101", "user_orig", "BROWSER", "Hindi")
+
+    metrics = analytics_svc.get_call_metrics()
+    assert metrics["total_calls"] == 1
+
+
+def test_database_persistence(temp_db):
+    """Verify calls persist across new AnalyticsService instances using same SQLite DB."""
+    svc1 = AnalyticsService(db=temp_db)
+    svc1.record_call_start("persist_001", "user_p", "BROWSER", "English")
+    svc1.record_call_end("persist_001", "SUCCESS", success_reason="Saved")
+
+    svc2 = AnalyticsService(db=temp_db)
+    metrics = svc2.get_call_metrics()
+    assert metrics["total_calls"] == 1
+    assert metrics["successful_calls"] == 1
+
