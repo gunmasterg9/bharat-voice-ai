@@ -94,6 +94,23 @@ class Database:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            call_id TEXT UNIQUE NOT NULL,
+            user_id TEXT,
+            channel TEXT NOT NULL,
+            language TEXT,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            duration_seconds INTEGER,
+            outcome TEXT NOT NULL,
+            success_reason TEXT,
+            failure_reason TEXT,
+            tool_used TEXT,
+            escalation_created INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
         """
         with self.get_connection() as conn:
             conn.executescript(schema_sql)

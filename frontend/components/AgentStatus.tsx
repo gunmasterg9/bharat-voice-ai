@@ -27,7 +27,12 @@ interface AgentStatusProps {
   escalationState?: EscalationUIState;
 }
 
-export function AgentStatus({ status, detectedLanguage, micLabel, escalationState }: AgentStatusProps) {
+export function AgentStatus({
+  status,
+  detectedLanguage,
+  micLabel,
+  escalationState,
+}: AgentStatusProps) {
   const renderStateDetails = () => {
     switch (status) {
       case 'READY':

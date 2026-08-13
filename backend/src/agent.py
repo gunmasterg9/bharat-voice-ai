@@ -48,6 +48,7 @@ from agent.logger import (
 )
 from agent.prompts import SYSTEM_PROMPT, WELCOME_MESSAGE
 from agent.voice_agent import BharatVoiceAgent
+from memory.analytics_service import get_analytics_service
 from memory.memory_service import get_memory_service
 from services.llm import create_llm
 from services.stt import create_stt
@@ -97,12 +98,19 @@ server.setup_fnc = prewarm
 
 @server.rtc_session(agent_name=settings.agent_name)
 async def bharat_voice_session(ctx: JobContext) -> None:
-    """Handle an incoming voice session with persistent caller memory."""
+    """Handle an incoming voice session with persistent caller memory and analytics."""
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
 
     log_session_connected(ctx.room.name)
+
+    analytics_svc = get_analytics_service()
+    call_id = ctx.room.name
+    voice_agent = None
+    session_error = None
+    channel = "BROWSER"
+    lang = "English"
 
     try:
         await ctx.connect()
@@ -126,13 +134,16 @@ async def bharat_voice_session(ctx: JobContext) -> None:
 
         # Extract persistent participant identity (wait for participant to connect)
         participant_identity = None
+        participant_kind = None
         try:
             timeout_sec = 30.0 if is_outbound else 10.0
             participant = await asyncio.wait_for(
                 ctx.wait_for_participant(), timeout=timeout_sec
             )
-            if participant and participant.identity:
-                participant_identity = participant.identity
+            if participant:
+                if participant.identity:
+                    participant_identity = participant.identity
+                participant_kind = getattr(participant, "kind", None)
 
         except Exception:
             logger.warning(
@@ -140,8 +151,21 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             )
             if ctx.room.remote_participants:
                 p = next(iter(ctx.room.remote_participants.values()))
-                if p and p.identity:
-                    participant_identity = p.identity
+                if p:
+                    if p.identity:
+                        participant_identity = p.identity
+                    participant_kind = getattr(p, "kind", None)
+
+        # Determine channel (SIP vs BROWSER)
+        if (
+            is_outbound
+            or participant_kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
+            or ctx.room.name.startswith("sip-")
+            or ctx.room.name.startswith("bharat-outbound-")
+        ):
+            channel = "SIP"
+        else:
+            channel = "BROWSER"
 
         # Determine user_id
         meta_user_id = outbound_metadata.get("user_id")
@@ -157,6 +181,7 @@ async def bharat_voice_session(ctx: JobContext) -> None:
         logger.info("[SESSION] IS OUTBOUND CALL = %s", is_outbound)
         logger.info("[MEMORY DEBUG] LIVEKIT IDENTITY = %s", participant_identity)
         logger.info("[MEMORY DEBUG] AGENT USER ID = %s", user_id)
+        logger.info("[ANALYTICS DEBUG] CHANNEL = %s", channel)
 
         # Check SQLite database for caller profile
         db_memory = get_memory_service()
@@ -168,6 +193,14 @@ async def bharat_voice_session(ctx: JobContext) -> None:
             caller_profile.get("language_preference")
             or outbound_metadata.get("language")
             or "Gujarati"
+        )
+
+        # Record call start in SQLite analytics
+        analytics_svc.record_call_start(
+            call_id=call_id,
+            user_id=user_id,
+            channel=channel,
+            language=lang,
         )
 
         if is_outbound:
@@ -277,8 +310,51 @@ async def bharat_voice_session(ctx: JobContext) -> None:
         await session.say(greeting)
 
     except Exception as exc:
+        session_error = str(exc)
         log_session_error(exc, context="pipeline setup")
         raise
+    finally:
+        # Determine final call outcome & record call end
+        outcome = "INCOMPLETE"
+        success_reason = None
+        failure_reason = None
+
+        if session_error:
+            outcome = "ERROR"
+            failure_reason = f"System error during session: {session_error}"
+        elif voice_agent:
+            if voice_agent.task_completed and not voice_agent.task_failed:
+                outcome = "SUCCESS"
+                success_reason = (
+                    voice_agent.success_reason
+                    or "Primary request completed successfully"
+                )
+            elif voice_agent.task_failed:
+                outcome = "FAILED"
+                failure_reason = (
+                    voice_agent.failure_reason or "Required tool or task failed"
+                )
+            else:
+                outcome = "INCOMPLETE"
+                failure_reason = "Conversation ended before completing an objective"
+
+        final_lang = (
+            getattr(voice_agent, "active_language", lang) if voice_agent else lang
+        )
+        tool_used = getattr(voice_agent, "tool_used", None) if voice_agent else None
+        escalation_created = (
+            getattr(voice_agent, "escalation_created", False) if voice_agent else False
+        )
+
+        analytics_svc.record_call_end(
+            call_id=call_id,
+            outcome=outcome,
+            success_reason=success_reason,
+            failure_reason=failure_reason,
+            tool_used=tool_used,
+            escalation_created=1 if escalation_created else 0,
+            language=final_lang,
+        )
 
 
 if __name__ == "__main__":

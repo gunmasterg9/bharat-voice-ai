@@ -64,7 +64,7 @@ export function App({ appConfig }: AppProps) {
     <AgentSessionProvider session={session}>
       <AppSetup />
       <main className="min-h-screen w-full">
-        <ViewController appConfig={appConfig} />
+        <ViewController />
       </main>
       <StartAudioButton label="Start Audio" />
       <Toaster

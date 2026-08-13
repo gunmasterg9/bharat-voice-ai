@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Headphones, Mic, Radio, ShieldCheck, Sparkles } from 'lucide-react';
+import { BarChart3, Headphones, Mic, Radio, ShieldCheck, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 
 interface HeaderProps {
@@ -13,8 +13,8 @@ interface HeaderProps {
     | 'CALL_ENDED'
     | 'PERMISSION_ERROR'
     | 'CONNECTION_ERROR';
-  activeView?: 'agent' | 'human-help';
-  onViewChange?: (view: 'agent' | 'human-help') => void;
+  activeView?: 'agent' | 'human-help' | 'analytics';
+  onViewChange?: (view: 'agent' | 'human-help' | 'analytics') => void;
 }
 
 export function Header({ status, activeView = 'agent', onViewChange }: HeaderProps) {
@@ -40,7 +40,7 @@ export function Header({ status, activeView = 'agent', onViewChange }: HeaderPro
               </h1>
               <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                 <Sparkles className="mr-1 h-3 w-3" />
-                Day 7
+                Day 8
               </span>
             </div>
             <p className="text-muted-foreground hidden text-xs sm:block">
@@ -74,7 +74,19 @@ export function Header({ status, activeView = 'agent', onViewChange }: HeaderPro
                 }`}
               >
                 <Headphones className="h-3.5 w-3.5 text-amber-500" />
-                <span>Human Help</span>
+                <span className="hidden sm:inline">Human Help</span>
+              </button>
+
+              <button
+                onClick={() => onViewChange('analytics')}
+                className={`flex items-center space-x-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  activeView === 'analytics'
+                    ? 'border border-indigo-500/30 bg-indigo-500/20 text-indigo-600 dark:text-indigo-300'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <BarChart3 className="h-3.5 w-3.5 text-indigo-500" />
+                <span>Analytics</span>
               </button>
             </div>
           )}

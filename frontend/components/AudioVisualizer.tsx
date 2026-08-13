@@ -16,7 +16,7 @@ export function AudioVisualizer({ status }: AudioVisualizerProps) {
   // Active track based on who is speaking
   const isAgentSpeaking = status === 'SPEAKING';
   const isUserSpeaking = status === 'LISTENING';
-  const activeTrack = isAgentSpeaking ? agentAudioTrack : microphoneTrack;
+  const activeTrack = (isAgentSpeaking ? agentAudioTrack : microphoneTrack?.track) as any;
 
   return (
     <div className="relative flex items-center justify-center py-1 sm:py-2">

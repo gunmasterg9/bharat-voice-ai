@@ -191,9 +191,7 @@ class WeatherService:
 
         # Check for invalid gibberish locations
         if any(c.isdigit() for c in clean_location) and len(clean_location) > 10:
-            logger.warning(
-                "[WEATHER SERVICE] Location not found: '%s'", clean_location
-            )
+            logger.warning("[WEATHER SERVICE] Location not found: '%s'", clean_location)
             return {
                 "success": False,
                 "error": "location_not_found",
@@ -439,9 +437,6 @@ class WeatherService:
                 "success": True,
                 "data": result_data,
             }
-
-
-
 
 
 # Singleton service instance

@@ -297,12 +297,19 @@ async def create_escalation_tool(
         user_permission,
     )
 
+    agent.tool_used = "create_escalation"
+    agent.primary_intent = "escalation"
+    agent.task_started = True
+
     if current_state != "APPROVED" or not user_permission:
         logger.warning(
             "[ESCALATION] create_escalation blocked: state='%s', user_permission=%s",
             current_state,
             user_permission,
         )
+        agent.tool_success = False
+        agent.task_failed = True
+        agent.failure_reason = "Escalation requested without caller permission"
         return json.dumps(
             {
                 "success": False,
@@ -334,12 +341,23 @@ async def create_escalation_tool(
         if res.get("success"):
             agent.escalation_state = "ESCALATION_CREATED"
             agent.active_reference_id = ref_id
+            agent.escalation_created = True
+            agent.tool_success = True
+            agent.task_completed = True
+            agent.success_reason = (
+                f"Human escalation created successfully (ref={ref_id})"
+            )
             res["state"] = "ESCALATION_CREATED"
             logger.info(
                 "[ESCALATION] State locked: ESCALATION_CREATED (ref=%s)", ref_id
             )
         else:
             agent.escalation_state = "ESCALATION_FAILED"
+            agent.tool_success = False
+            agent.task_failed = True
+            agent.failure_reason = (
+                res.get("message") or "Database error creating escalation"
+            )
             res["state"] = "ESCALATION_FAILED"
             logger.warning("[ESCALATION] State: ESCALATION_FAILED")
 
@@ -347,6 +365,9 @@ async def create_escalation_tool(
     except Exception as exc:
         logger.error("[TOOLS] Unexpected error creating escalation: %s", exc)
         agent.escalation_state = "ESCALATION_FAILED"
+        agent.tool_success = False
+        agent.task_failed = True
+        agent.failure_reason = str(exc)
         return json.dumps(
             {
                 "success": False,

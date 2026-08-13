@@ -67,6 +67,17 @@ class BharatVoiceAgent(Agent):
         self.escalation_state: str = "IDLE"
         self.active_reference_id: str | None = None
 
+        # Day 8 Call Context & Intent Tracking
+        self.primary_intent: str | None = None
+        self.task_started: bool = False
+        self.task_completed: bool = False
+        self.task_failed: bool = False
+        self.tool_used: str | None = None
+        self.tool_success: bool = False
+        self.escalation_created: bool = False
+        self.success_reason: str | None = None
+        self.failure_reason: str | None = None
+
         # Load caller's saved language preference if profile exists, else default to English
         caller_profile = self.db_memory.get_user(self.user_id) or {}
         self.active_language: str = (
@@ -604,6 +615,10 @@ class BharatVoiceAgent(Agent):
                     }
                     language_preference = lang_map.get(last_lang, "Hindi")
 
+        self.tool_used = "save_caller_memory"
+        self.primary_intent = "memory"
+        self.task_started = True
+
         updated_user = self.db_memory.save_user(
             user_id=target_id,
             name=name,
@@ -614,6 +629,9 @@ class BharatVoiceAgent(Agent):
         if updated_user:
             logger.info("[MEMORY DEBUG] SAVE SUCCESS")
             logger.info("[MEMORY DEBUG] COMMIT SUCCESS")
+            self.tool_success = True
+            self.task_completed = True
+            self.success_reason = "Caller profile saved to SQLite with explicit consent"
 
             # Perform immediate lookup to verify write
             verify_read = self.db_memory.get_user(target_id)
@@ -630,6 +648,9 @@ class BharatVoiceAgent(Agent):
 
             return f"Successfully saved caller information for future conversations. Name: {name or 'Not specified'}, Language: {language_preference or 'Not specified'}."
 
+        self.tool_success = False
+        self.task_failed = True
+        self.failure_reason = "Failed to save caller profile due to a database error."
         return "Failed to save caller profile due to a database error."
 
     @function_tool
@@ -775,6 +796,10 @@ class BharatVoiceAgent(Agent):
             )
 
         logger.info("[TOOL] weather request started for location '%s'", target_location)
+        self.tool_used = "get_weather"
+        self.primary_intent = "weather"
+        self.task_started = True
+
         weather_svc = get_weather_service()
         result = await weather_svc.get_weather_data(
             location=target_location, forecast_days=forecast_days
@@ -782,12 +807,18 @@ class BharatVoiceAgent(Agent):
 
         if result.get("success"):
             logger.info("[TOOL] weather request successful for '%s'", target_location)
+            self.tool_success = True
+            self.task_completed = True
+            self.success_reason = f"Weather data retrieved for '{target_location}'"
         else:
             logger.error(
                 "[TOOL] weather request failed for '%s': %s",
                 target_location,
                 result.get("error"),
             )
+            self.tool_success = False
+            self.task_failed = True
+            self.failure_reason = result.get("message") or "Weather API lookup failed"
 
         return json.dumps(result, ensure_ascii=False)
 

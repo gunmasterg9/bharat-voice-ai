@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { ConnectionState } from 'livekit-client';
 import { useAgent, useSessionContext } from '@livekit/components-react';
 import { AgentStatus, AgentUIState } from '@/components/AgentStatus';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
+import { CallAnalyticsDashboard } from '@/components/CallAnalyticsDashboard';
 import { ConnectionError } from '@/components/ConnectionError';
 import { ConversationTranscript } from '@/components/ConversationTranscript';
 import { Footer } from '@/components/Footer';
@@ -21,17 +23,11 @@ export function VoiceAgent() {
   const [uiState, setUiState] = useState<AgentUIState>('READY');
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
   const [chatOpen, setChatOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'agent' | 'human-help'>('agent');
+  const [activeView, setActiveView] = useState<'agent' | 'human-help' | 'analytics'>('agent');
 
   // Sync LiveKit connection & agent state to UI state
   useEffect(() => {
     if (uiState === 'PERMISSION_ERROR') {
-      return;
-    }
-
-    if (session.error) {
-      setUiState('CONNECTION_ERROR');
-      setErrorMessage(session.error.message || 'Connection to LiveKit server failed.');
       return;
     }
 
@@ -41,7 +37,7 @@ export function VoiceAgent() {
       return;
     }
 
-    if (session.isConnecting) {
+    if (session.connectionState === ConnectionState.Connecting) {
       setUiState('CONNECTING');
       return;
     }
@@ -54,7 +50,7 @@ export function VoiceAgent() {
       }
       return;
     }
-  }, [session.isConnected, session.isConnecting, session.error, agent.state, uiState]);
+  }, [session.isConnected, session.connectionState, agent.state, uiState]);
 
   // State for active detected microphone label
   const [activeMicLabel, setActiveMicLabel] = useState<string>('Default Microphone');
@@ -198,6 +194,10 @@ export function VoiceAgent() {
       {activeView === 'human-help' ? (
         <main className="flex-1 overflow-y-auto">
           <HumanHelpDashboard />
+        </main>
+      ) : activeView === 'analytics' ? (
+        <main className="flex-1 overflow-y-auto py-4">
+          <CallAnalyticsDashboard />
         </main>
       ) : (
         <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-2 sm:px-6">

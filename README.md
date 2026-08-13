@@ -307,12 +307,33 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
+## 📊 Day 8 - Call Analytics Dashboard
+
+Bharat Voice AI includes a real **Call Analytics Dashboard** driven by live call data stored in SQLite (`backend/data/bharat_voice.db`).
+
+### Metrics Tracked
+- **TOTAL CALLS**: `COUNT(*)` — total voice sessions across Browser and Linphone SIP channels.
+- **SUCCESSFUL CALLS**: `COUNT(outcome = 'SUCCESS')` — calls where user's primary request (weather, memory save, human escalation) completed successfully.
+- **FAILED CALLS**: `FAILED`, `INCOMPLETE`, or `ERROR` calls where a tool failed or the call ended before task completion.
+
+### Key Routes
+- `/analytics` — Full Analytics Dashboard page
+- `/dashboard` — Alias Analytics Dashboard route
+- Header Tab Switcher (`Voice Agent` | `Human Help` | `Analytics`)
+
+### API Endpoints
+- `GET /api/analytics/summary` — Returns real-time metrics summary (`total_calls`, `successful_calls`, `failed_calls`).
+- `GET /api/analytics/calls` — Returns safe operational log of recent calls.
+
+---
+
 ## 🔒 Security & Privacy Rules
 
 - **Secrets Handling**: All secrets, API keys, and SIP credentials are loaded strictly from environment variables (`.env.local`). Secrets are never committed or logged.
 - **User Consent**: User profiles, names, and saved locations are persisted in SQLite only after explicit user verbal consent.
 - **Outbound Consent**: Outbound phone call alerts are placed strictly when `outbound_call_consent == True`.
 - **Immediate Opt-Out**: Upon opt-out (*"Don't call me again"*), consent is set to `False` in SQLite and call alerts stop immediately.
+- **Analytics Privacy**: Dashboard displays operational metrics only. No passwords, OTPs, PINs, bank details, or full conversation transcripts are stored or exposed.
 
 ---
 
@@ -327,3 +348,4 @@ Hashtags: `#10DaysofAIVoiceAgents` `#MurfFalcon` `#VoiceForBharat`
 ## 📜 License
 
 Built for the **Voice for Bharat Challenge 2026** powered by [Murf AI](https://murf.ai/).
+
