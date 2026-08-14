@@ -41,11 +41,9 @@ def analytics_svc(temp_db):
 def test_zero_calls_metrics(analytics_svc):
     """Verify get_call_metrics returns zeros when no calls exist."""
     metrics = analytics_svc.get_call_metrics()
-    assert metrics == {
-        "total_calls": 0,
-        "successful_calls": 0,
-        "failed_calls": 0,
-    }
+    assert metrics["total_calls"] == 0
+    assert metrics["successful_calls"] == 0
+    assert metrics["failed_calls"] == 0
 
 
 def test_call_start(analytics_svc):
@@ -184,6 +182,7 @@ def test_recent_calls_safe_fields(analytics_svc):
         "call_id",
         "channel",
         "language",
+        "agent_name",
         "started_at",
         "ended_at",
         "duration_seconds",
@@ -192,13 +191,16 @@ def test_recent_calls_safe_fields(analytics_svc):
         "failure_reason",
         "tool_used",
         "escalation_created",
+        "specialist_handoff",
     }
     assert set(c.keys()).issubset(safe_keys)
 
 
 def test_call_id_uniqueness_and_duplicate_start(analytics_svc):
     """Verify duplicate call_id starts update existing record without creating duplicates."""
-    analytics_svc.record_call_start("unique_call_101", "user_orig", "BROWSER", "English")
+    analytics_svc.record_call_start(
+        "unique_call_101", "user_orig", "BROWSER", "English"
+    )
     analytics_svc.record_call_start("unique_call_101", "user_orig", "BROWSER", "Hindi")
 
     metrics = analytics_svc.get_call_metrics()
@@ -215,4 +217,3 @@ def test_database_persistence(temp_db):
     metrics = svc2.get_call_metrics()
     assert metrics["total_calls"] == 1
     assert metrics["successful_calls"] == 1
-

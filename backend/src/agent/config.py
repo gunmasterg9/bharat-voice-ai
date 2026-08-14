@@ -28,7 +28,7 @@ DEFAULT_TTS_STYLE = "Conversation"
 DEFAULT_AGENT_NAME = "bharat-voice-ai"
 DEFAULT_MIN_SENTENCE_LEN = 1
 
-# Catalog of verified Indian voices supported on Murf Falcon
+# Catalog of verified Indian voices built for India supported on Murf Falcon
 INDIAN_VOICE_PRESETS = {
     "pooja": {
         "voice": "Pooja",
@@ -59,6 +59,72 @@ INDIAN_VOICE_PRESETS = {
         "locale": "en-IN",
         "style": "Conversation",
         "gender": "Male",
+    },
+    "hindi": {
+        "voice": "Pooja",
+        "locale": "hi-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "gujarati": {
+        "voice": "Pooja",
+        "locale": "gu-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "tamil": {
+        "voice": "Pooja",
+        "locale": "ta-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "bengali": {
+        "voice": "Pooja",
+        "locale": "bn-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "marathi": {
+        "voice": "Pooja",
+        "locale": "mr-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "telugu": {
+        "voice": "Pooja",
+        "locale": "te-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "kannada": {
+        "voice": "Pooja",
+        "locale": "kn-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "malayalam": {
+        "voice": "Pooja",
+        "locale": "ml-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "punjabi": {
+        "voice": "Pooja",
+        "locale": "pa-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "assamese": {
+        "voice": "Pooja",
+        "locale": "as-IN",
+        "style": "Conversation",
+        "gender": "Female",
+    },
+    "odia": {
+        "voice": "Pooja",
+        "locale": "or-IN",
+        "style": "Conversation",
+        "gender": "Female",
     },
 }
 

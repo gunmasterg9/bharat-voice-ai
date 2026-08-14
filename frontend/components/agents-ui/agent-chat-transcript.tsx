@@ -45,6 +45,20 @@ export interface AgentChatTranscriptProps extends ComponentProps<'div'> {
  * />
  * ```
  */
+const isJsonOrFunctionCall = (msg: string) => {
+  if (!msg) return false;
+  const trimmed = msg.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return true;
+  if (
+    trimmed.includes('This JSON response is for a function call') ||
+    trimmed.includes('function_call') ||
+    trimmed.includes('The function called is')
+  ) {
+    return true;
+  }
+  return false;
+};
+
 export function AgentChatTranscript({
   agentState,
   messages = [],
@@ -54,21 +68,23 @@ export function AgentChatTranscript({
   return (
     <Conversation className={className} {...props}>
       <ConversationContent>
-        {messages.map((receivedMessage) => {
-          const { id, timestamp, from, message } = receivedMessage;
-          const locale = navigator?.language ?? 'en-US';
-          const messageOrigin = from?.isLocal ? 'user' : 'assistant';
-          const time = new Date(timestamp);
-          const title = time.toLocaleTimeString(locale, { timeStyle: 'full' });
+        {messages
+          .filter((m) => !isJsonOrFunctionCall(m.message))
+          .map((receivedMessage) => {
+            const { id, timestamp, from, message } = receivedMessage;
+            const locale = navigator?.language ?? 'en-US';
+            const messageOrigin = from?.isLocal ? 'user' : 'assistant';
+            const time = new Date(timestamp);
+            const title = time.toLocaleTimeString(locale, { timeStyle: 'full' });
 
-          return (
-            <Message key={id} title={title} from={messageOrigin}>
-              <MessageContent>
-                <MessageResponse>{message}</MessageResponse>
-              </MessageContent>
-            </Message>
-          );
-        })}
+            return (
+              <Message key={id} title={title} from={messageOrigin}>
+                <MessageContent>
+                  <MessageResponse>{message}</MessageResponse>
+                </MessageContent>
+              </Message>
+            );
+          })}
         <AnimatePresence>
           {agentState === 'thinking' && <AgentChatIndicator size="sm" />}
         </AnimatePresence>

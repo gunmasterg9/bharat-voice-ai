@@ -118,9 +118,9 @@ class Database:
             # Perform safe column additions on existing 'users' table
             cursor = conn.cursor()
             cursor.execute("PRAGMA table_info(users);")
-            existing_cols = {row[1] for row in cursor.fetchall()}
+            existing_user_cols = {row[1] for row in cursor.fetchall()}
 
-            new_columns = [
+            new_user_columns = [
                 ("phone_number", "TEXT"),
                 ("phone_verified", "INTEGER DEFAULT 0"),
                 ("outbound_call_consent", "INTEGER DEFAULT 0"),
@@ -131,10 +131,25 @@ class Database:
                 ("opted_out", "INTEGER DEFAULT 0"),
             ]
 
-            for col_name, col_type in new_columns:
-                if col_name not in existing_cols:
+            for col_name, col_type in new_user_columns:
+                if col_name not in existing_user_cols:
                     cursor.execute(
                         f"ALTER TABLE users ADD COLUMN {col_name} {col_type};"
+                    )
+
+            # Perform safe column additions on existing 'calls' table
+            cursor.execute("PRAGMA table_info(calls);")
+            existing_calls_cols = {row[1] for row in cursor.fetchall()}
+
+            new_calls_columns = [
+                ("agent_name", "TEXT DEFAULT 'bharat_voice_ai'"),
+                ("specialist_handoff", "INTEGER DEFAULT 0"),
+            ]
+
+            for col_name, col_type in new_calls_columns:
+                if col_name not in existing_calls_cols:
+                    cursor.execute(
+                        f"ALTER TABLE calls ADD COLUMN {col_name} {col_type};"
                     )
 
         logger.info("Memory database initialized & schema updated: %s", self.db_path)

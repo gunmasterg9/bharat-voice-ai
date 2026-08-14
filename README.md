@@ -60,6 +60,19 @@
 - Multi-channel support tracking both Browser and SIP voice calls.
 - Privacy protection ensuring operational logs contain no credentials, OTPs, or full conversation transcripts.
 
+## Day 9 - Specialist Agent Handoff
+
+- **Main Agent**: `Bharat Voice AI` (General multilingual assistant, memory, escalations, general tools)
+- **Specialist Agent**: `Bharat Weather Specialist` (Dedicated weather forecast specialist)
+- **Handoff**: Main Agent → Weather Specialist (`tuple[Agent, str]` native LiveKit handoff)
+- **Why Specialist Exists**: Offloads complex weather forecasting, location normalization, and weather follow-ups from the general conversational agent to a focused, single-purpose specialist.
+- **When Handoff Occurs**: Triggered automatically when the caller requests detailed current or forecast weather, rain, temperature, humidity, or wind information.
+- **Context Preservation**: Seamlessly transfers user profile, original query, and active language so callers never repeat themselves.
+- **Multilingual Support**: Preserves spoken language and native scripts (Devanagari for Hindi, Gujarati script for Gujarati, Latin for English/Hinglish).
+- **Real Weather Tool**: Specialist executes real Open-Meteo REST API queries (`get_weather`) while keeping raw JSON/tool call details internal.
+- **Failure Handling**: Fallback mechanisms handle handoff failures and weather API outages safely without crashing or hallucinating weather values.
+- **Testing**: Fully covered by `tests/test_day9_specialist_handoff.py` and `tests/test_weather_tool.py` (124 passed tests).
+
 ---
 
 ## Architecture

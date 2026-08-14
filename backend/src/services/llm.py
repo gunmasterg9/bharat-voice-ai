@@ -39,7 +39,7 @@ def create_llm(config: GeminiConfig):
         A LiveKit-compatible LLM instance.
     """
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-    groq_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant").strip()
+    groq_model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
     provider = os.environ.get("LLM_PROVIDER", "auto").strip().lower()
     nvidia_key = (
         os.environ.get("NVIDIA_API_KEY", "").strip()
@@ -52,6 +52,16 @@ def create_llm(config: GeminiConfig):
         or os.environ.get("GEMINI_API_KEY", "").strip()
     )
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if provider == "groq":
+        if not groq_key or openai is None:
+            raise RuntimeError("LLM_PROVIDER=groq requires GROQ_API_KEY.")
+        logger.info("Creating Groq LLM service by explicit provider selection: model=%s", groq_model)
+        return openai.LLM(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=groq_key,
+            model=groq_model,
+        )
 
     if provider == "gemini":
         logger.info(

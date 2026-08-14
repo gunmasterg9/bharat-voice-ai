@@ -33,6 +33,7 @@ class AnalyticsService:
         user_id: str = "default_user",
         channel: str = "BROWSER",
         language: str | None = None,
+        agent_name: str = "bharat_voice_ai",
     ) -> dict[str, Any]:
         """
         Record the start of a call. Initial outcome is INCOMPLETE.
@@ -49,27 +50,38 @@ class AnalyticsService:
 
         query = """
         INSERT INTO calls (
-            call_id, user_id, channel, language, started_at, outcome, created_at
-        ) VALUES (?, ?, ?, ?, ?, 'INCOMPLETE', ?)
+            call_id, user_id, channel, language, agent_name, started_at, outcome, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'INCOMPLETE', ?)
         ON CONFLICT(call_id) DO UPDATE SET
             user_id = excluded.user_id,
             channel = excluded.channel,
+            agent_name = COALESCE(excluded.agent_name, calls.agent_name),
             language = COALESCE(excluded.language, calls.language);
         """
-        params = (call_id, user_id, channel_clean, language, now_iso, now_iso)
+        params = (
+            call_id,
+            user_id,
+            channel_clean,
+            language,
+            agent_name,
+            now_iso,
+            now_iso,
+        )
         self.db.execute_write(query, params)
 
         logger.info(
-            "[ANALYTICS] Call started | Call ID: %s | Channel: %s | User ID: %s",
+            "[ANALYTICS] Call started | Call ID: %s | Channel: %s | User ID: %s | Agent: %s",
             call_id,
             channel_clean,
             user_id,
+            agent_name,
         )
         return {
             "call_id": call_id,
             "user_id": user_id,
             "channel": channel_clean,
             "language": language,
+            "agent_name": agent_name,
             "started_at": now_iso,
             "outcome": "INCOMPLETE",
         }
@@ -83,6 +95,8 @@ class AnalyticsService:
         tool_used: str | None = None,
         escalation_created: int = 0,
         language: str | None = None,
+        agent_name: str | None = None,
+        specialist_handoff: int = 0,
         ended_at: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -101,7 +115,7 @@ class AnalyticsService:
 
         # Retrieve existing call record to compute duration
         existing = self.db.execute_read(
-            "SELECT started_at, language FROM calls WHERE call_id = ? LIMIT 1;",
+            "SELECT started_at, language, agent_name FROM calls WHERE call_id = ? LIMIT 1;",
             (call_id,),
         )
 
@@ -118,9 +132,19 @@ class AnalyticsService:
                 call_id=call_id,
                 channel="BROWSER",
                 language=language,
+                agent_name=agent_name or "bharat_voice_ai",
             )
 
         final_lang = language or (existing[0]["language"] if existing else None)
+        final_agent = agent_name or (
+            existing[0]["agent_name"] if existing else "bharat_voice_ai"
+        )
+
+        is_handoff = (
+            1
+            if (specialist_handoff or tool_used == "handoff_to_weather_specialist")
+            else 0
+        )
 
         update_query = """
         UPDATE calls
@@ -131,6 +155,8 @@ class AnalyticsService:
             failure_reason = ?,
             tool_used = ?,
             escalation_created = ?,
+            specialist_handoff = ?,
+            agent_name = COALESCE(?, agent_name),
             language = COALESCE(?, language)
         WHERE call_id = ?;
         """
@@ -142,16 +168,20 @@ class AnalyticsService:
             failure_reason,
             tool_used,
             1 if escalation_created else 0,
+            is_handoff,
+            final_agent,
             final_lang,
             call_id,
         )
         self.db.execute_write(update_query, params)
 
         logger.info(
-            "[ANALYTICS] Call ended | Call ID: %s | Outcome: %s | Duration: %ds",
+            "[ANALYTICS] Call ended | Call ID: %s | Outcome: %s | Duration: %ds | Agent: %s | Handoff: %d",
             call_id,
             outcome_clean,
             duration_seconds,
+            final_agent,
+            is_handoff,
         )
         return {
             "call_id": call_id,
@@ -161,6 +191,8 @@ class AnalyticsService:
             "failure_reason": failure_reason,
             "tool_used": tool_used,
             "escalation_created": 1 if escalation_created else 0,
+            "specialist_handoff": is_handoff,
+            "agent_name": final_agent,
         }
 
     def get_call_metrics(self) -> dict[str, int]:
@@ -170,12 +202,14 @@ class AnalyticsService:
         - total_calls = COUNT(*)
         - successful_calls = COUNT(outcome = 'SUCCESS')
         - failed_calls = COUNT(outcome != 'SUCCESS')
+        - specialist_handoffs = SUM(specialist_handoff)
         """
         query = """
         SELECT
             COUNT(*) as total_calls,
             SUM(CASE WHEN outcome = 'SUCCESS' THEN 1 ELSE 0 END) as successful_calls,
-            SUM(CASE WHEN outcome != 'SUCCESS' THEN 1 ELSE 0 END) as failed_calls
+            SUM(CASE WHEN outcome != 'SUCCESS' THEN 1 ELSE 0 END) as failed_calls,
+            SUM(CASE WHEN specialist_handoff = 1 OR tool_used = 'handoff_to_weather_specialist' THEN 1 ELSE 0 END) as specialist_handoffs
         FROM calls;
         """
         rows = self.db.execute_read(query)
@@ -184,16 +218,19 @@ class AnalyticsService:
                 "total_calls": 0,
                 "successful_calls": 0,
                 "failed_calls": 0,
+                "specialist_handoffs": 0,
             }
 
         total = rows[0]["total_calls"] or 0
         success = rows[0]["successful_calls"] or 0
         failed = rows[0]["failed_calls"] or 0
+        handoffs = rows[0]["specialist_handoffs"] or 0
 
         return {
             "total_calls": int(total),
             "successful_calls": int(success),
             "failed_calls": int(failed),
+            "specialist_handoffs": int(handoffs),
         }
 
     def get_recent_calls(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -206,6 +243,7 @@ class AnalyticsService:
             call_id,
             channel,
             language,
+            agent_name,
             started_at,
             ended_at,
             duration_seconds,
@@ -213,7 +251,8 @@ class AnalyticsService:
             success_reason,
             failure_reason,
             tool_used,
-            escalation_created
+            escalation_created,
+            specialist_handoff
         FROM calls
         ORDER BY id DESC
         LIMIT ?;
@@ -221,19 +260,22 @@ class AnalyticsService:
         rows = self.db.execute_read(query, (limit,))
         results = []
         for r in rows:
+            r_dict = dict(r)
             results.append(
                 {
-                    "call_id": r["call_id"],
-                    "channel": r["channel"],
-                    "language": r["language"],
-                    "started_at": r["started_at"],
-                    "ended_at": r["ended_at"],
-                    "duration_seconds": r["duration_seconds"],
-                    "outcome": r["outcome"],
-                    "success_reason": r["success_reason"],
-                    "failure_reason": r["failure_reason"],
-                    "tool_used": r["tool_used"],
-                    "escalation_created": bool(r["escalation_created"]),
+                    "call_id": r_dict.get("call_id"),
+                    "channel": r_dict.get("channel"),
+                    "language": r_dict.get("language"),
+                    "agent_name": r_dict.get("agent_name") or "bharat_voice_ai",
+                    "started_at": r_dict.get("started_at"),
+                    "ended_at": r_dict.get("ended_at"),
+                    "duration_seconds": r_dict.get("duration_seconds"),
+                    "outcome": r_dict.get("outcome"),
+                    "success_reason": r_dict.get("success_reason"),
+                    "failure_reason": r_dict.get("failure_reason"),
+                    "tool_used": r_dict.get("tool_used"),
+                    "escalation_created": bool(r_dict.get("escalation_created", 0)),
+                    "specialist_handoff": bool(r_dict.get("specialist_handoff", 0)),
                 }
             )
         return results

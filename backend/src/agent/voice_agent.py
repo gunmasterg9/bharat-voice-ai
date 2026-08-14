@@ -8,6 +8,7 @@ silence management, Day 1 function tools, and Day 4 SQLite persistent memory too
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -734,11 +735,7 @@ class BharatVoiceAgent(Agent):
         forecast_days: int = 1,
     ) -> str:
         """
-        Retrieve live current or forecast weather data for a requested location in India or globally.
-
-        Use this tool ALWAYS whenever the user asks about current, today's, tomorrow's, or upcoming weather,
-        temperature, rain, precipitation, wind, or weather forecast for any location.
-        Do NOT use general LLM knowledge for current weather.
+        Get real current and forecast weather for a specified location. Use this tool whenever the user asks about current weather, today's weather, temperature, rain, humidity, wind, or forecast. Never invent current weather information.
 
         Args:
             location: The city or region name (e.g. 'Veraval', 'Ahmedabad', 'Mumbai', 'Delhi').
@@ -970,3 +967,81 @@ class BharatVoiceAgent(Agent):
         return await switch_language_tool(
             agent=self, context=context, target_language=target_language
         )
+
+    @function_tool
+    async def handoff_to_weather_specialist(
+        self,
+        context: RunContext,
+        location: str = "",
+        original_request: str = "",
+        language: str = "",
+    ) -> tuple[Agent, str]:
+        """
+        Connect the user to the Bharat Weather Specialist for detailed weather requests.
+
+        Use this tool ALWAYS when the user asks for:
+        - detailed current weather or today's weather
+        - temperature or feels-like temperature
+        - rain, rainfall, precipitation, humidity, wind
+        - weather forecast or weather-related follow-up questions
+
+        Do NOT use this tool for normal general questions (e.g. greetings, who are you, what can you do, memory, human escalation).
+
+        Args:
+            location: City or region name if specified (e.g. 'Veraval', 'Ahmedabad', 'Rajkot').
+            original_request: User's original weather question (e.g. 'What is the weather in Veraval today?').
+            language: Active conversation language ('en', 'hi', 'gu', 'English', 'Hindi', 'Gujarati').
+        """
+        req_text = original_request.strip() if original_request else "weather query"
+        loc_text = (
+            location.strip()
+            if location
+            else (getattr(self, "location", None) or "unspecified")
+        )
+        lang_code = language.strip() if language else self.active_language
+
+        # Safe required logging
+        logger.info("[HANDOFF] Weather specialist requested")
+        logger.info("[HANDOFF] Original request received: %s", req_text)
+        logger.info("[HANDOFF] Language: %s", lang_code)
+        logger.info("[HANDOFF] Location: %s", loc_text)
+        logger.info("[HANDOFF] Transferring conversation")
+
+        try:
+            from agent.specialist import BharatWeatherSpecialist
+
+            specialist = BharatWeatherSpecialist(
+                session_id=self.session_id,
+                user_id=self.user_id,
+                active_language=self.active_language,
+                initial_request=req_text,
+                location=loc_text if loc_text != "unspecified" else None,
+                db_memory=self.db_memory,
+            )
+
+            # Record specialist handoff in agent state for call analytics
+            self.tool_used = "handoff_to_weather_specialist"
+            self.task_started = True
+
+            # Store specialist instance on active agent for test access
+            self.active_specialist = specialist
+
+            announcement = "For detailed weather information, I'll connect you with our weather specialist."
+            if self.active_language.lower() in ["hindi", "hinglish"]:
+                announcement = (
+                    "मौसम की विस्तृत जानकारी के लिए, मैं आपको हमारे मौसम विशेषज्ञ से जोड़ती हूँ।"
+                )
+            elif self.active_language.lower() in ["gujarati", "gujlish"]:
+                announcement = (
+                    "હવામાનની વિગતવાર માહિતી માટે, હું તમને અમારા હવામાન નિષ્ણાત સાથે જોડું છું."
+                )
+
+            return (specialist, announcement)
+
+        except Exception as exc:
+            logger.error("[HANDOFF] Handoff to weather specialist failed: %s", exc)
+            return (
+                self,
+                "I'm unable to connect you to the weather specialist right now, but I'll continue helping you here.",
+            )
+
